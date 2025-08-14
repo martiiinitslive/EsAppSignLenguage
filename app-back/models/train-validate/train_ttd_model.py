@@ -22,7 +22,7 @@ from tqdm import tqdm
 DATASET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'dictadologia'))  # Ruta absoluta al dataset de dictadología
 IMG_SIZE = 64  # Tamaño de las imágenes (ancho y alto)
 BATCH_SIZE = 16  # Número de muestras por batch
-EPOCHS = 30  # Número de épocas de entrenamiento (más entrenamiento para mejor aprendizaje)
+EPOCHS = 50  # Número de épocas de entrenamiento (más entrenamiento para mejor aprendizaje)
 EMBEDDING_DIM = 128  # Dimensión del embedding para cada letra (debe coincidir con ttd_model.py)
 VOCAB = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'  # Todas las letras presentes en el dataset
 
