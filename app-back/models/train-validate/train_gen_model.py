@@ -3,6 +3,10 @@ Script de entrenamiento para TextToDictaModel.
 Debes adaptar la carga de datos a tu dataset de imágenes de dictadología.
 """
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,15 +14,25 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import os
-from generator_model import TextToDictaModel
+from models.generator_model import TextToDictaModel
 
 # Configuración
-DATASET_DIR = '../../data/dactilologia/'  # Cambia esta ruta a tu dataset
+DATASET_DIR = 'data/dictadologia'  # Cambia esta ruta a tu dataset
 IMG_SIZE = 64
 BATCH_SIZE = 16
 EPOCHS = 10
 EMBEDDING_DIM = 32
 VOCAB = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'  # Incluye todas las letras de tu dataset
+
+# Verificar distribución de imágenes por carpeta
+for letter in VOCAB:
+    letter_dir = os.path.join(DATASET_DIR, letter)
+    if os.path.exists(letter_dir):
+        imgs = [f for f in os.listdir(letter_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        print(f"{letter}: {len(imgs)} imágenes")
+    else:
+        print(f"{letter}: carpeta no existe")
+
 
 # Dataset personalizado
 class DictaDataset(Dataset):
@@ -31,10 +45,15 @@ class DictaDataset(Dataset):
             transforms.Resize((img_size, img_size)),
             transforms.ToTensor()
         ])
+        # Adaptado a la estructura: data/dictadologia/A/*.png, B/*.png, ...
         for idx, letter in enumerate(vocab):
-            img_path = os.path.join(data_dir, f'{letter}.png')
-            if os.path.exists(img_path):
-                self.data.append((idx, img_path))
+            letter_dir = os.path.join(data_dir, letter)
+            if not os.path.exists(letter_dir):
+                continue
+            for img_name in os.listdir(letter_dir):
+                if img_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    img_path = os.path.join(letter_dir, img_name)
+                    self.data.append((idx, img_path))
 
     def __len__(self):
         return len(self.data)
@@ -65,12 +84,19 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 # Entrenamiento
 train_losses = []
 val_losses = []
+
+import matplotlib.pyplot as plt
+
 for epoch in range(EPOCHS):
     model.train()
     running_loss = 0.0
     for i, (labels, images) in enumerate(train_loader):
         optimizer.zero_grad()
         outputs = model(labels)
+        # Ajusta el shape para comparar correctamente
+        if outputs.shape != images.shape:
+            # Si outputs es [batch, 64, 64] y images es [batch, 1, 64, 64], elimina el canal
+            images = images.squeeze(1)
         loss = criterion(outputs, images)
         loss.backward()
         optimizer.step()
@@ -85,11 +111,27 @@ for epoch in range(EPOCHS):
     with torch.no_grad():
         for labels, images in val_loader:
             outputs = model(labels)
+            if outputs.shape != images.shape:
+                images = images.squeeze(1)
             loss = criterion(outputs, images)
             val_loss += loss.item()
     avg_val_loss = val_loss/len(val_loader) if len(val_loader) > 0 else 0
     val_losses.append(avg_val_loss)
     print(f'Epoch {epoch+1}/{EPOCHS}, Val Loss: {avg_val_loss:.4f}')
+
+    # Guardar la gráfica de seguimiento en cada epoch
+    plt.figure(figsize=(8,5))
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Evolución de la pérdida modelo de texto a dictadologia')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(f'text_to_dicta_loss_epoch_{epoch+1}.png')
+    plt.show()
+    plt.close()
 
 
 # Guardar modelo

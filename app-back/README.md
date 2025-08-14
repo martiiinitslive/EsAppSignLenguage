@@ -37,8 +37,16 @@ Backend para el proyecto de intérprete de lengua de signos en español.
 	pip install torch torchvision fastapi moviepy matplotlib pillow
 	```
 
+
 ## Ejecución de la API
-Lanza el backend con:
+Lanza el backend con el script recomendado:
+```
+python run_api.py
+```
+Puedes configurar el host y puerto con las variables de entorno `API_HOST` y `API_PORT`.
+Para desarrollo, el backend se recarga automáticamente con cada cambio.
+
+También puedes lanzar manualmente con:
 ```
 uvicorn main:app --reload
 ```
