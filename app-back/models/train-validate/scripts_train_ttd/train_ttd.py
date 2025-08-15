@@ -33,7 +33,9 @@ if __name__ == '__main__':
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     print(f"[INFO] Dividiendo en {train_size} entrenamiento y {val_size} validación...")
+    # Data augmentation solo en entrenamiento
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    train_dataset.dataset.transform = train_dataset.dataset.transform = DictaDataset(DATASET_DIR, VOCAB, IMG_SIZE, augment=True).transform
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     print("[INFO] Dataset cargado y dividido correctamente.")
@@ -59,6 +61,7 @@ if __name__ == '__main__':
     train_losses = []  # Pérdida en entrenamiento (generador)
     val_losses = []    # Pérdida en validación (generador)
     d_losses = []      # Pérdida del discriminador
+    val_adv_losses = [] # Pérdida adversarial en validación
 
     # Medición de tiempo total
     start_time = time.time()
@@ -141,7 +144,9 @@ if __name__ == '__main__':
 
         # Validación por batch
         model.eval()
+        discriminator.eval()
         val_loss = 0.0
+        val_adv_loss = 0.0
         with torch.no_grad():
             for labels, images in tqdm(val_loader, desc=f"Epoch {epoch+1} - Val"):
                 labels, images = labels.to(device), images.to(device)
@@ -150,18 +155,25 @@ if __name__ == '__main__':
                 loss_perceptual = criterion_perceptual(outputs, images)
                 loss = loss_mse + lambda_perceptual * loss_perceptual
                 val_loss += loss.item()
+                # Pérdida adversarial en validación
+                real_labels = torch.ones(images.size(0), 1, device=device)
+                adv_loss = criterion_adv(discriminator(outputs), real_labels)
+                val_adv_loss += adv_loss.item()
         avg_val_loss = val_loss/len(val_loader) if len(val_loader) > 0 else 0
+        avg_val_adv_loss = val_adv_loss/len(val_loader) if len(val_loader) > 0 else 0
         val_losses.append(avg_val_loss)
-        print(f'[INFO] Epoch {epoch+1}/{EPOCHS}, Val Loss: {avg_val_loss:.4f}')
+        val_adv_losses.append(avg_val_adv_loss)
+        print(f'[INFO] Epoch {epoch+1}/{EPOCHS}, Val Loss: {avg_val_loss:.4f}, Val Adv Loss: {avg_val_adv_loss:.4f}')
 
         # Guardar y mostrar la gráfica de seguimiento en cada epoch
-        plt.figure(figsize=(8,5))
-        plt.plot(train_losses, label='Gen Loss')
-        plt.plot(val_losses, label='Val Loss')
-        plt.plot(d_losses, label='Disc Loss')
+        plt.figure(figsize=(10,6))
+        plt.plot(train_losses, label='Gen Train Loss')
+        plt.plot(val_losses, label='Gen Val Loss')
+        plt.plot(val_adv_losses, label='Gen Val Adv Loss')
+        plt.plot(d_losses, label='Disc Train Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
-        plt.title('Evolución de la pérdida (Generador/Discriminador)')
+        plt.title('Evolución de las pérdidas (Generador/Discriminador)')
         plt.legend()
         plt.grid()
         plt.tight_layout()

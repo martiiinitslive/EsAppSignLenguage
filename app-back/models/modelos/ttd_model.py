@@ -19,6 +19,7 @@ config_ttd = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config_ttd)
 EMBEDDING_DIM = config_ttd.EMBEDDING_DIM
 IMG_SIZE = config_ttd.IMG_SIZE
+DROP_PROB = getattr(config_ttd, 'DROPOUT_PROB', 0.2)
 
 # Definición de la clase del modelo generador
 # Discriminador: distingue entre imágenes reales y generadas
@@ -26,26 +27,27 @@ class DictaDiscriminator(nn.Module):
     def __init__(self, img_size=IMG_SIZE):
         super(DictaDiscriminator, self).__init__()
         self.img_size = img_size
+        from torch.nn.utils import spectral_norm
         self.model = nn.Sequential(
             # Entrada: (batch, 3, 128, 128)
-            nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1),  # (batch, 32, 64, 64)
+            spectral_norm(nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1)),  # (batch, 32, 64, 64)
             nn.LeakyReLU(0.2),
-            nn.Dropout(0.25),
+            nn.Dropout(DROP_PROB),
 
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # (batch, 64, 32, 32)
+            spectral_norm(nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1)),  # (batch, 64, 32, 32)
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2),
-            nn.Dropout(0.25),
+            nn.Dropout(DROP_PROB),
 
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # (batch, 128, 16, 16)
+            spectral_norm(nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)),  # (batch, 128, 16, 16)
             nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2),
-            nn.Dropout(0.25),
+            nn.Dropout(DROP_PROB),
 
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # (batch, 256, 8, 8)
+            spectral_norm(nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1)),  # (batch, 256, 8, 8)
             nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2),
-            nn.Dropout(0.25),
+            nn.Dropout(DROP_PROB),
 
             nn.Flatten(),
             nn.Linear(256 * 8 * 8, 1),
@@ -82,33 +84,61 @@ class TextToDictaModel(nn.Module):
             nn.ReLU()  # Activación no lineal
         )
 
-        # Bloques deconvolucionales (ConvTranspose2d):
-        # Expanden el mapa de características inicial hasta obtener la imagen final
-        self.deconv = nn.Sequential(
-            # 8x8x512 → 16x16x256
-            nn.ConvTranspose2d(self.init_channels, 256, kernel_size=4, stride=2, padding=1),
+        # Encoder (downsampling)
+        self.enc1 = nn.Sequential(
+            nn.Conv2d(self.init_channels, 256, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(),
-            nn.Dropout(0.2),  # Dropout para regularización, ayuda a evitar sobreajuste
-
-            # 16x16x256 → 32x32x128
-            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
+            nn.Dropout(DROP_PROB),
+        ) # 8x8x512 → 16x16x256
+        self.enc2 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-
-            # 32x32x128 → 64x64x64
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.Dropout(DROP_PROB),
+        ) # 16x16x256 → 32x32x128
+        self.enc3 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-
-            # 64x64x64 → 128x128x32
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
+            nn.Dropout(DROP_PROB),
+        ) # 32x32x128 → 64x64x64
+        self.enc4 = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
+            nn.Dropout(DROP_PROB),
+        ) # 64x64x64 → 128x128x32
 
-            # Capa final: reduce los canales a 3 (RGB), mantiene tamaño 128x128
-            nn.Conv2d(32, 3, kernel_size=3, stride=1, padding=1),
-            nn.Tanh()  # Limita la salida al rango [-1, 1]
+        # Decoder (upsampling) con skip connections
+        self.dec1 = nn.Sequential(
+            nn.ConvTranspose2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Dropout(DROP_PROB),
+        ) # 128x128x32 → 64x64x64
+        self.dec2 = nn.Sequential(
+            nn.ConvTranspose2d(64*2, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Dropout(DROP_PROB),
+        ) # 64x64x128 → 32x32x128
+        self.dec3 = nn.Sequential(
+            nn.ConvTranspose2d(128*2, 256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Dropout(DROP_PROB),
+        ) # 32x32x256 → 16x16x256
+        self.dec4 = nn.Sequential(
+            nn.ConvTranspose2d(256*2, self.init_channels, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(self.init_channels),
+            nn.ReLU(),
+            nn.Dropout(DROP_PROB),
+        ) # 16x16x512 → 8x8x512
+
+        self.final_conv = nn.Sequential(
+            nn.Conv2d(self.init_channels, 3, kernel_size=3, stride=1, padding=1),
+            nn.Tanh()
         )
 
         # Inicialización de pesos recomendada para mejorar el aprendizaje
@@ -123,20 +153,28 @@ class TextToDictaModel(nn.Module):
 
     def forward(self, x):
         # x: tensor de índices de letras (batch,)
-
-        # Paso 1: convertir el índice de la letra en su embedding
-        emb = self.embedding(x)  # (batch, embedding_dim)
+        emb = self.embedding(x)
         if emb.dim() > 2:
-            emb = emb.squeeze(1)  # Asegura que la dimensión sea correcta
+            emb = emb.squeeze(1)
+        out = self.fc(emb)
+        out = out.view(-1, self.init_channels, self.init_map_size, self.init_map_size)
 
-        # Paso 2: proyectar el embedding a un vector largo y reestructurarlo a un mapa de características inicial
-        out = self.fc(emb)  # (batch, init_channels * init_map_size * init_map_size)
-        out = out.view(-1, self.init_channels, self.init_map_size, self.init_map_size)  # (batch, channels, 8, 8)
+        # Encoder
+        e1 = self.enc1(out)  # 16x16x256
+        e2 = self.enc2(e1)   # 32x32x128
+        e3 = self.enc3(e2)   # 64x64x64
+        e4 = self.enc4(e3)   # 128x128x32
 
-        # Paso 3: expandir el mapa de características con bloques deconvolucionales hasta obtener la imagen final
-        imgs = self.deconv(out)  # (batch, 3, 128, 128)
+        # Decoder con skip connections
+        d1 = self.dec1(e4)   # 64x64x64
+        d1 = torch.cat([d1, e3], dim=1)  # Skip connection
+        d2 = self.dec2(d1)   # 32x32x128
+        d2 = torch.cat([d2, e2], dim=1)
+        d3 = self.dec3(d2)   # 16x16x256
+        d3 = torch.cat([d3, e1], dim=1)
+        d4 = self.dec4(d3)   # 8x8x512
 
-        # Devuelve las imágenes generadas, normalizadas en [-1, 1]
+        imgs = self.final_conv(d4)
         return imgs
 
 ## Ejemplo de uso:

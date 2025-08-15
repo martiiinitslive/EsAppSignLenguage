@@ -12,7 +12,7 @@ from PIL import Image
 # Cada muestra es una imagen y su índice de letra
 # Adaptado para cargar imágenes de dictadología, normalizadas para el modelo generativo.
 class DictaDataset(Dataset):
-    def __init__(self, data_dir, vocab, img_size):
+    def __init__(self, data_dir, vocab, img_size, augment=False):
         """
         Inicializa el dataset de dictadología.
 
@@ -26,13 +26,22 @@ class DictaDataset(Dataset):
         self.img_size = img_size
 
         # Transformaciones para las imágenes:
-        # 1. Convierte a tensor (canal, alto, ancho)
-        # 2. Normaliza a rango [-1, 1] para facilitar el aprendizaje del modelo
-        self.transform = transforms.Compose([
-            transforms.Resize((self.img_size, self.img_size)),  # Redimensiona a img_size x img_size
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))
-        ])
+        # Si augment=True, añade data augmentation
+        if augment:
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size, self.img_size)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(15),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5,), (0.5,))
+            ])
+        else:
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size, self.img_size)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5,), (0.5,))
+            ])
 
         # Recorre cada letra del vocabulario y añade las imágenes encontradas en su carpeta
         for idx, letter in enumerate(vocab):
