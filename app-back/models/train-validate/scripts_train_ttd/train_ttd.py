@@ -57,14 +57,16 @@ os.makedirs(REAL_EXAMPLES_PATH, exist_ok=True)
 
 # Guardar ejemplos reales del dataset antes de entrenar
 import torchvision.utils as vutils
-batch = next(iter(train_loader))
-_, images = batch
-images = (images + 1) / 2  # Desnormaliza a [0, 1]
-for i in range(min(4, images.size(0))):
-    img = images[i].cpu()
+val_batch = next(iter(val_loader))
+val_labels, val_images = val_batch
+val_images = (val_images + 1) / 2  # Desnormaliza a [0, 1]
+for i in range(min(4, val_images.size(0))):
+    img = val_images[i].cpu()
+    idx_letra = val_labels[i].item()
+    letra = VOCAB[idx_letra]
     from torchvision import transforms as T
     img_pil = T.ToPILImage()(img)
-    img_name = f'ejemplo_real_{i+1}.png'
+    img_name = f'ejemplo_real_{i+1}_{letra}.png'
     img_path = os.path.join(REAL_EXAMPLES_PATH, img_name)
     img_pil.save(img_path)
 print(f"Ejemplos reales del dataset guardados en: {REAL_EXAMPLES_PATH}")
@@ -121,24 +123,29 @@ for epoch in range(EPOCHS):
 
     # Guardar ejemplos generados por el modelo en cada epoch
     with torch.no_grad():
-        for labels, _ in val_loader:
-            labels = labels.to(device)
-            outputs = model(labels)
-            # Desnormaliza de [-1, 1] a [0, 1] para visualización
-            outputs = (outputs + 1) / 2
-            for i in range(min(4, outputs.size(0))):
-                img = outputs[i].cpu()
-                img = img.squeeze(0) if img.dim() == 3 and img.size(0) == 1 else img
-                from torchvision import transforms as T
-                img_pil = T.ToPILImage()(img)
-                img_name = f'epoch_{epoch+1}_example_{i+1}.png'
-                img_path = os.path.join(EXAMPLES_PATH, img_name)
-                img_pil.save(img_path)
-            break  # Solo el primer batch
+        val_labels_batch = val_labels.to(device)
+        outputs = model(val_labels_batch)
+        outputs = (outputs + 1) / 2
+        for i in range(min(4, outputs.size(0))):
+            img = outputs[i].cpu()
+            img = img.squeeze(0) if img.dim() == 3 and img.size(0) == 1 else img
+            from torchvision import transforms as T
+            img_pil = T.ToPILImage()(img)
+            idx_letra = val_labels[i].item()
+            letra = VOCAB[idx_letra]
+            img_name = f'epoch_{epoch+1}_example_{i+1}_{letra}.png'
+            img_path = os.path.join(EXAMPLES_PATH, img_name)
+            img_pil.save(img_path)
         print(f"[INFO] Ejemplos generados guardados en: {EXAMPLES_PATH}")
 
 # Guardar el modelo entrenado al finalizar
+end_time = time.time()
+total_time = end_time - start_time
+total_hours = int(total_time // 3600)
+total_minutes = int((total_time % 3600) // 60)
+total_seconds = int(total_time % 60)
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'modelEntrenado', 'ttd_model_trained.pth'))
 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 torch.save(model.state_dict(), MODEL_PATH)
 print(f'[INFO] Entrenamiento finalizado y modelo guardado en: {MODEL_PATH}')
+print(f'[INFO] Tiempo total de entrenamiento: {total_hours}:{total_minutes:02d}:{total_seconds:02d}')
