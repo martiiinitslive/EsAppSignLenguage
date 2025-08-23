@@ -1,0 +1,11 @@
+**ttd_model**
+
+examnina #file:ttd_model.py y #file:train_ttd.py, dime del 1-10 la complejidad
+
+Pendiente:
+
+Condicionamiento avanzado (más allá de embedding)
+Capas de atención
+Inicialización He/Orthogonal (opcional)
+Métricas automáticas (SSIM, PSNR, FID)
+Entrenamiento progresivo
