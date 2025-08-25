@@ -19,6 +19,10 @@ config_ttd = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config_ttd)
 EMBEDDING_DIM = config_ttd.EMBEDDING_DIM
 IMG_SIZE = config_ttd.IMG_SIZE
+INIT_MAP_SIZE = config_ttd.INIT_MAP_SIZE
+INIT_CHANNELS = config_ttd.INIT_CHANNELS
+DROPOUT_PROB = config_ttd.DROPOUT_PROB
+LEAKY_RELU_SLOPE = config_ttd.LEAKY_RELU_SLOPE
 
 # Definición de la clase del modelo generador
 class TextToDictaModel(nn.Module):
@@ -26,30 +30,58 @@ class TextToDictaModel(nn.Module):
         super(TextToDictaModel, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
         self.img_size = img_size
-        self.init_map_size = 8  # Tamaño inicial del mapa de características (8x8)
-        self.init_channels = 256  # Número de canales iniciales para el mapa de características
+        self.init_map_size = INIT_MAP_SIZE
+        self.init_channels = INIT_CHANNELS
+        self.dropout_prob = DROPOUT_PROB
+        self.leaky_relu_slope = LEAKY_RELU_SLOPE
 
         self.fc = nn.Sequential(
             nn.Linear(embedding_dim, self.init_channels * self.init_map_size * self.init_map_size),
-            nn.ReLU()
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout(self.dropout_prob)
         )
 
-        self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(self.init_channels, 128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1),
-            nn.Tanh()
+        # Encoder (bloques descendentes)
+        self.enc1 = nn.Sequential(
+            nn.Conv2d(self.init_channels, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
         )
+        self.enc2 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
+        )
+
+        # Decoder (bloques ascendentes con skip connections)
+        self.dec1 = nn.Sequential(
+            nn.ConvTranspose2d(128, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
+        )
+        self.dec2 = nn.Sequential(
+            nn.ConvTranspose2d(256, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
+        )
+        self.dec3 = nn.Sequential(
+            nn.ConvTranspose2d(320, 32, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
+        )
+        self.dec4 = nn.Sequential(
+            nn.ConvTranspose2d(544, 16, kernel_size=4, stride=2, padding=1),  # <-- Cambia 64 por 544
+            nn.BatchNorm2d(16),
+            nn.LeakyReLU(self.leaky_relu_slope),
+            nn.Dropout2d(self.dropout_prob)
+        )
+        self.final_conv = nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1)
+        self.tanh = nn.Tanh()
 
     def forward(self, x):
         # x: tensor de índices de letras (batch,)
@@ -57,12 +89,26 @@ class TextToDictaModel(nn.Module):
         emb = self.embedding(x)  # (batch, embedding_dim)
         if emb.dim() > 2:
             emb = emb.squeeze(1)
-        # Paso 2: proyectar el embedding a un vector largo y reestructurarlo a un mapa de características inicial
-        out = self.fc(emb)  # (batch, init_channels * init_map_size * init_map_size)
-        out = out.view(-1, self.init_channels, self.init_map_size, self.init_map_size)  # (batch, channels, 8, 8)
-        # Paso 3: expandir el mapa de características con bloques deconvolucionales hasta obtener la imagen final
-        imgs = self.deconv(out)  # (batch, 3, 128, 128)
-        # Devuelve las imágenes generadas, normalizadas en [-1, 1]
+        out = self.fc(emb)
+        out = out.view(-1, self.init_channels, self.init_map_size, self.init_map_size)
+
+        # Encoder
+        e1 = self.enc1(out)  # (batch, 256, 8, 8)
+        e2 = self.enc2(e1)   # (batch, 128, 8, 8)
+
+        # Decoder con skip connections
+        d1 = self.dec1(e2)   # (batch, 128, 16, 16)
+        e2_up = nn.functional.interpolate(e2, size=d1.shape[2:], mode='nearest')  # Upsample e2
+        d1_cat = torch.cat([d1, e2_up], dim=1)  # (batch, 256, 16, 16)
+        d2 = self.dec2(d1_cat)  # (batch, 64, 32, 32)
+        e1_up = nn.functional.interpolate(e1, size=d2.shape[2:], mode='nearest')  # Upsample e1
+        d2_cat = torch.cat([d2, e1_up], dim=1)  # (batch, 128, 32, 32)
+        d3 = self.dec3(d2_cat)  # (batch, 32, 64, 64)
+        out_up = nn.functional.interpolate(out, size=d3.shape[2:], mode='nearest')  # Upsample out
+        d3_cat = torch.cat([d3, out_up], dim=1)  # (batch, 544, 64, 64)
+        d4 = self.dec4(d3_cat)  # (batch, 16, 128, 128)
+        imgs = self.final_conv(d4)
+        imgs = self.tanh(imgs)
         return imgs
 
 ## Ejemplo de uso:
