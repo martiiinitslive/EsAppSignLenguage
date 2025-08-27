@@ -29,19 +29,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # BASE_DIR apunta a la raíz del proyecto
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-DATASET_DIR = os.path.join(BASE_DIR, 'data', 'dictadologia')
+DATASET_DIR = os.path.join(BASE_DIR, 'app-back', 'data', 'dictadologia')
 
 RESULTS_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'train-ttd-model-epoch')
 os.makedirs(RESULTS_PATH, exist_ok=True)
+
 EXAMPLES_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'ejemplos-generados-ttd-model')
 os.makedirs(EXAMPLES_PATH, exist_ok=True)
+
 REAL_EXAMPLES_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'ejemplos-reales-dataset')
 os.makedirs(REAL_EXAMPLES_PATH, exist_ok=True)
 
+print(f"[DEBUG] DATASET_DIR: {DATASET_DIR}")
+
+
 # Carga el dataset y lo divide en entrenamiento/validación (80/20)
 full_dataset = DictaDataset(DATASET_DIR, VOCAB, IMG_SIZE)
+print(f"[DEBUG] Total imágenes en dataset: {len(full_dataset)}")
 train_size = int(0.8 * len(full_dataset))
+print(f"[DEBUG] Tamaño del conjunto de entrenamiento: {train_size}")
 val_size = len(full_dataset) - train_size
+print(f"[DEBUG] Tamaño del conjunto de validación: {val_size}")
 train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
@@ -68,7 +76,7 @@ start_time = time.time()
 import torchvision.utils as vutils
 val_batch = next(iter(val_loader))
 val_labels, val_images = val_batch
-val_images = (val_images + 1) / 2  # Desnormaliza a [0, 1]
+val_images = (val_images + 1) / 2  # Desnormaliza a [0, 1] para que sean visualizables
 for i in range(min(NUM_EJEMPLOS, val_images.size(0))):
     img = val_images[i].cpu()
     idx_letra = val_labels[i].item()

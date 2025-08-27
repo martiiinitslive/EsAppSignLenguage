@@ -23,7 +23,7 @@ class DictaDataset(Dataset):
             # transforms.Grayscale(),
             transforms.Resize((img_size, img_size)),
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: x * 2 - 1),  # Normaliza a [-1, 1] para Tanh
+            #transforms.Lambda(lambda x: x * 2 - 1),  # Normaliza a [-1, 1] para Tanh
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
         # Recorre cada letra y añade sus imágenes
@@ -35,6 +35,7 @@ class DictaDataset(Dataset):
                 if img_name.lower().endswith(('.png', '.jpg', '.jpeg')):
                     img_path = os.path.join(letter_dir, img_name)
                     self.data.append((idx, img_path))
+        print(f"Total de imágenes encontradas: {len(self.data)}")
 
     def __len__(self):
         return len(self.data)
