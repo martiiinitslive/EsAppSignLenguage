@@ -6,7 +6,7 @@
 # Añade la carpeta raíz al path para importar módulos del proyecto
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(r'D:\tfg_teleco\proyectos\EsAppSingLenguageAI')
 
 import torch
 import torch.nn as nn
@@ -52,7 +52,7 @@ class PerceptualLoss(nn.Module):
         return self.criterion(feat_input, feat_target)
 
 
-DATASET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'dictadologia'))  # Ruta absoluta al dataset de dictadología
+DATASET_DIR = r'D:\tfg_teleco\proyectos\EsAppSingLenguageAI\app-back\data\dictadologia'  # Ruta absoluta al dataset de dictadología
 IMG_SIZE = 64  # Tamaño de las imágenes (ancho y alto)
 BATCH_SIZE = 16  # Número de muestras por batch
 EPOCHS = 50  # Número de épocas de entrenamiento (más entrenamiento para mejor aprendizaje)

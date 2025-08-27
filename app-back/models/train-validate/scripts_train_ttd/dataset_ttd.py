@@ -1,4 +1,3 @@
-
 # Dataset personalizado para dictadología
 # Cada muestra es una imagen y su índice de letra
 # Adaptado para cargar imágenes de dictadología, normalizadas para el modelo generativo.
@@ -24,7 +23,8 @@ class DictaDataset(Dataset):
             # transforms.Grayscale(),
             transforms.Resize((img_size, img_size)),
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: x * 2 - 1)  # Normaliza a [-1, 1] para Tanh
+            transforms.Lambda(lambda x: x * 2 - 1),  # Normaliza a [-1, 1] para Tanh
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
         # Recorre cada letra y añade sus imágenes
         for idx, letter in enumerate(vocab):

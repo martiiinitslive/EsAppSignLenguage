@@ -165,7 +165,7 @@ class TextToDictaModel(nn.Module):
 
         # Decoder y skip connections
         d1 = self.dec1(e3_attn)
-        e3_up = nn.functional.interpolate(e3_attn, size=d1.shape[2:], mode='nearest')
+        e3_up = nn.functional.interpolate(e3_attn, size=d1.shape[2:], mode='bilinear', align_corners=False)
         d1_cat = torch.cat([d1, e3_up], dim=1)
 
         d2 = self.dec2(d1_cat)
@@ -204,26 +204,26 @@ class DictaDiscriminator(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels, 32, kernel_size=4, stride=2, padding=1),   # 256x256 -> 128x128
             nn.BatchNorm2d(32),
-            nn.LeakyReLU(self.leaky_relu_slope),
-            nn.Dropout2d(self.dropout_prob)
+            nn.LeakyReLU(self.leaky_relu_slope)
+            # Sin Dropout
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),            # 128x128 -> 64x64
             nn.BatchNorm2d(64),
             nn.LeakyReLU(self.leaky_relu_slope),
-            nn.Dropout2d(self.dropout_prob)
+            nn.Dropout2d(self.dropout_prob * 0.25)
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),           # 64x64 -> 32x32
             nn.BatchNorm2d(128),
             nn.LeakyReLU(self.leaky_relu_slope),
-            nn.Dropout2d(self.dropout_prob)
+            nn.Dropout2d(self.dropout_prob * 0.5)
         )
         self.conv4 = nn.Sequential(
             nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),          # 32x32 -> 16x16
             nn.BatchNorm2d(256),
             nn.LeakyReLU(self.leaky_relu_slope),
-            nn.Dropout2d(self.dropout_prob)
+            nn.Dropout2d(self.dropout_prob * 0.75)
         )
         self.conv5 = nn.Sequential(
             nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1),          # 16x16 -> 8x8

@@ -26,7 +26,17 @@ from config_ttd import IMG_SIZE, EMBEDDING_DIM, VOCAB, BATCH_SIZE, EPOCHS, LAMBD
 # Definir el dispositivo de cómputo (GPU si está disponible, si no CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-DATASET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'dictadologia'))  # Ruta absoluta al dataset
+# BASE_DIR apunta a la raíz del proyecto
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+
+DATASET_DIR = os.path.join(BASE_DIR, 'data', 'dictadologia')
+
+RESULTS_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'train-ttd-model-epoch')
+os.makedirs(RESULTS_PATH, exist_ok=True)
+EXAMPLES_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'ejemplos-generados-ttd-model')
+os.makedirs(EXAMPLES_PATH, exist_ok=True)
+REAL_EXAMPLES_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'ejemplos-reales-dataset')
+os.makedirs(REAL_EXAMPLES_PATH, exist_ok=True)
 
 # Carga el dataset y lo divide en entrenamiento/validación (80/20)
 full_dataset = DictaDataset(DATASET_DIR, VOCAB, IMG_SIZE)
@@ -53,15 +63,6 @@ val_losses_G = []
 
 # Inicializar el tiempo de inicio antes del bucle de entrenamiento
 start_time = time.time()
-
-# Configuración de carpetas para guardar resultados
-RESULTS_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'imagenes', 'train-ttd-model-epoch'))
-os.makedirs(RESULTS_PATH, exist_ok=True)
-EXAMPLES_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'imagenes', 'ejemplos-generados-ttd-model'))
-os.makedirs(EXAMPLES_PATH, exist_ok=True)
-# Carpeta para ejemplos reales del dataset
-REAL_EXAMPLES_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'imagenes', 'ejemplos-reales-dataset'))
-os.makedirs(REAL_EXAMPLES_PATH, exist_ok=True)
 
 # Guardar ejemplos reales del dataset antes de entrenar
 import torchvision.utils as vutils
@@ -225,15 +226,14 @@ elapsed_minutes = int((elapsed_time % 3600) // 60)
 elapsed_seconds = int(elapsed_time % 60)
 print(f'[INFO] Tiempo total de entrenamiento: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d}')
 
-# --- Guardar el generador entrenado ---
-GEN_PATH = r'C:\Users\marti\Desktop\tfg_teleco\proyectos\es-sing-language-ai\EsAppSingLenguageAI\app-back\models\modelos_trained\ttd_model\GEN_ttd_model.pth'
-os.makedirs(os.path.dirname(GEN_PATH), exist_ok=True)
+base_path = os.path.join(BASE_DIR, 'app-back', 'models', 'modelos_trained', 'ttd_model')
+os.makedirs(base_path, exist_ok=True)
+GEN_PATH = os.path.join(base_path, 'GEN_ttd_model.pth')
 torch.save(model_G.state_dict(), GEN_PATH)
 print(f'[INFO] Generador guardado en: {GEN_PATH}')
 
 # --- Guardar el discriminador entrenado ---
-DISC_PATH = r'C:\Users\marti\Desktop\tfg_teleco\proyectos\es-sing-language-ai\EsAppSingLenguageAI\app-back\models\modelos_trained\ttd_model\DISC_ttd_model.pth'
-os.makedirs(os.path.dirname(DISC_PATH), exist_ok=True)
+DISC_PATH = os.path.join(base_path, 'DISC_ttd_model.pth')
 torch.save(model_D.state_dict(), DISC_PATH)
 print(f'[INFO] Discriminador guardado en: {DISC_PATH}')
 

@@ -2,15 +2,15 @@ import os
 import shutil
 import json
 
-# Configuración
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# BASE_DIR apunta a la raíz del proyecto (EsAppSingLenguageAI)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 ORIGENES = [
-    os.path.join(BASE_DIR, '..', 'data', 'dataset-en-bruto', 'lse_static1'),
-    os.path.join(BASE_DIR, '..', 'data', 'dataset-en-bruto', 'lse_static2'),
-    #os.path.join(BASE_DIR, '..', 'data', 'dataset-en-bruto', 'otra_carpeta'),
+    os.path.join(BASE_DIR, 'app-back', 'data', 'dataset-en-bruto', 'lse_static1'),
+    os.path.join(BASE_DIR, 'app-back', 'data', 'dataset-en-bruto', 'lse_static2'),
     # ...añade aquí más rutas si lo necesitas
 ]
-DESTINO = os.path.join(BASE_DIR, '..', 'data', 'dictadologia')
+DESTINO = os.path.join(BASE_DIR, 'app-back', 'data', 'dictadologia')
 
 # Letras con movimiento y su tipo/base
 movimientos = {

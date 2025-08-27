@@ -87,3 +87,22 @@ El "val loss" (pérdida de validación) sube y baja porque el modelo está evalu
 5. Batching: Si la validación se hace por lotes, la composición de cada batch puede afectar la pérdida calculada.
 
 En resumen, estas subidas y bajadas son normales, especialmente en las primeras épocas o con datasets pequeños. Si la tendencia general es descendente y no hay aumentos bruscos sostenidos, el entrenamiento va bien. Si quieres menos oscilación, puedes aumentar el tamaño del conjunto de validación o usar técnicas como el promedio móvil para suavizar la curva.
+
+
+''
+La diferencia entre nearest y bilinear en la función interpolate de PyTorch es:
+
+nearest:
+
+Usa el valor del píxel más cercano al nuevo punto.
+Es rápido y simple, pero puede producir bordes duros y bloques visibles (efecto "pixelado").
+No suaviza la imagen.
+bilinear:
+
+Calcula el valor del nuevo píxel como una media ponderada de los 4 píxeles vecinos.
+Produce resultados más suaves y continuos.
+Es mejor para imágenes donde quieres evitar bordes duros y artefactos.
+En tu modelo:
+Usar bilinear en las skip connections ayuda a que las características se mezclen de forma más suave, lo que puede mejorar la calidad visual de las imágenes generadas.
+Usar nearest puede hacer que las imágenes tengan bloques o bordes poco naturales.
+''

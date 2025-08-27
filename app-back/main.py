@@ -7,6 +7,8 @@ from src.components.speech_to_text import speech_to_text
 
 app = FastAPI()
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido a la API de interpretación de lengua de signos en español"}
@@ -14,8 +16,10 @@ def read_root():
 # Endpoint para recibir un video y procesarlo
 @app.post("/procesar_video/")
 async def procesar_video(file: UploadFile = File(...)):
+    temp_dir = os.path.join(BASE_DIR, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    video_path = os.path.join(temp_dir, f"temp_{file.filename}")
     # Guardar el archivo de video temporalmente
-    video_path = f"temp_{file.filename}"
     with open(video_path, "wb") as buffer:
         buffer.write(await file.read())
 

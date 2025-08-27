@@ -4,9 +4,9 @@ import random
 from itertools import product
 
 # Configuración
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DICTADOLOGIA = os.path.join(BASE_DIR, '..', 'data', 'dictadologia')
-MORPHING = os.path.join(BASE_DIR, '..', 'data', 'morphing')
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+DICTADOLOGIA = os.path.join(BASE_DIR, 'app-back', 'data', 'dictadologia')
+MORPHING = os.path.join(BASE_DIR, 'app-back', 'data', 'morphing')
 
 # Obtener todas las letras presentes en dictadologia
 letras = [l for l in os.listdir(DICTADOLOGIA) if os.path.isdir(os.path.join(DICTADOLOGIA, l))]
