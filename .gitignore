@@ -1,0 +1,52 @@
+#para ignorar todas las carpetas llamadas 'x'
+#hay que poner: **/x/
+
+# Ignorar archivo y carpetas de documentación
+codigo-de-ejemplos-redes/
+requirements.txt
+uso_rep.md
+
+# --- BACKEND ---
+# Ignorar archivos y carpetas comunes de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+.env
+.venv/
+.env.*
+# Ignorar modelos grandes y datos temporales
+**data/
+**/models/**/*.pt
+**/models/**/*.pth
+**/notebooks/
+**/imagenes/
+# --- FRONTEND ---
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# testing
+coverage/
+
+# production
+build/
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
