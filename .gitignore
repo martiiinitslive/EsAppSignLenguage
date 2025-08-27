@@ -2,7 +2,7 @@
 #hay que poner: **/x/
 
 # Ignorar archivo y carpetas de documentación
-codigo-de-ejemplos-redes/
+codigo-de-ejemplo-redes/
 requirements.txt
 venv_run.bat
 
