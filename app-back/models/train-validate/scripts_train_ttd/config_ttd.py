@@ -4,23 +4,25 @@
 
 ## GENERADOR
 N = 5  # bloques upsampling de ttd_model
-IMG_SIZE = 256  # Tamaño (alto y ancho) de las imágenes procesadas por el modelo
+IMG_SIZE = 512  # Tamaño (alto y ancho) de las imágenes procesadas por el modelo
 EMBEDDING_DIM = 256  # Dimensión del vector de embedding para cada letra
 VOCAB = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'  # Letras reconocidas por el modelo (vocabulario)
 INIT_MAP_SIZE = IMG_SIZE // (2 ** N)  # Tamaño inicial del mapa de características
-INIT_CHANNELS = 256  # Número de canales iniciales
-DROPOUT_ENCODER = 0.1  # Dropout para el encoder del generador
-DROPOUT_DECODER = 0.05  # Dropout para el decoder del generador
+INIT_CHANNELS = 512  # Número de canales iniciales (antes 256)
+DROPOUT_ENCODER = 0.05  # Dropout para el encoder del generador (antes 0.1)
+DROPOUT_DECODER = 0.02  # Dropout para el decoder del generador (antes 0.05)
 LEAKY_RELU_SLOPE = 0.2  # Parámetro 'negative_slope' para LeakyReLU
 
 ## DISCRIMINADOR
-DROPOUT_DISC = 0.1  # Dropout para el discriminador
+DROPOUT_DISC = 0.05     # Dropout para el discriminador (antes 0.1)
 
 # Parámetros de entrenamiento
-BATCH_SIZE = 20  # Número de muestras procesadas en cada batch de entrenamiento
-EPOCHS = 10  # Número de épocas
-LAMBDA_PERCEPTUAL = 0.25  # Peso de la perceptual loss en la función de coste total
-LR_G = 0.0002  # Tasa de aprendizaje del generador
-LR_D = 0.0001  # Tasa de aprendizaje del discriminador
+BATCH_SIZE = 8  # Número de muestras procesadas en cada batch de entrenamiento
+EPOCHS = 100  # Número de épocas
+LAMBDA_PERCEPTUAL = 0.5  # Peso de la perceptual loss en la función de coste total
+LR_G = 0.0004  # Generador: sube para que aprenda más rápido
+LR_D = 0.00005 # Discriminador: baja para que no domine el entrenamiento
 DATASET_DIR = None  # Ruta al directorio del dataset
 NUM_EJEMPLOS = 1  # Número de ejemplos reales y generados a guardar por epoch
+SAVE_FREQ = 5  # Guardar cada x epochs (puedes cambiar el valor)
+GENERATOR_STEPS = 2  # Número de pasos del generador por cada paso del discriminador

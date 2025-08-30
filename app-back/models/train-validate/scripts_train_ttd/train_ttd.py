@@ -13,6 +13,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import models
 import torch.nn.functional as F
+from torchvision import transforms
 
 # Importación absoluta de los módulos
 import sys, os
@@ -21,7 +22,7 @@ sys.path.append(modelos_path)
 from ttd_model import TextToDictaModel, DictaDiscriminator
 from dataset_ttd import DictaDataset
 from losses_ttd import PerceptualLoss
-from config_ttd import IMG_SIZE, EMBEDDING_DIM, VOCAB, BATCH_SIZE, EPOCHS, LAMBDA_PERCEPTUAL, NUM_EJEMPLOS, LR_G, LR_D
+from config_ttd import IMG_SIZE, EMBEDDING_DIM, VOCAB, BATCH_SIZE, EPOCHS, LAMBDA_PERCEPTUAL, NUM_EJEMPLOS, LR_G, LR_D, SAVE_FREQ, GENERATOR_STEPS
 
 if __name__ == "__main__":
     # Definir el dispositivo de cómputo (GPU si está disponible, si no CPU)
@@ -58,6 +59,7 @@ if __name__ == "__main__":
     val_size = len(full_dataset) - train_size
     print(f"[DEBUG] Tamaño del conjunto de validación: {val_size}")
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=BATCH_SIZE,
@@ -148,19 +150,21 @@ if __name__ == "__main__":
             optimizer_D.step()
             running_loss_D += loss_D.item()
 
-            # --- Entrenamiento del Generador ---
-            optimizer_G.zero_grad()
-            output_fake_for_G = model_D(fake_images)
-            loss_G_bce = criterion_bce(output_fake_for_G, real_labels)
-            loss_G_mse = criterion_mse(fake_images, real_images)
-            loss_G_perceptual = criterion_perceptual((fake_images + 1) / 2, (real_images + 1) / 2)
-            loss_G = loss_G_bce + loss_G_mse + lambda_perceptual * loss_G_perceptual
-            loss_G.backward()
-            optimizer_G.step()
-            running_loss_G += loss_G.item()
-            running_loss_G_bce += loss_G_bce.item()
-            running_loss_G_mse += loss_G_mse.item()
-            running_loss_G_perceptual += loss_G_perceptual.item()
+            # --- Entrenamiento del Generador (GENERATOR_STEPS veces por cada paso del discriminador) ---
+            for _ in range(GENERATOR_STEPS):
+                optimizer_G.zero_grad()
+                fake_images = model_G(labels)
+                output_fake_for_G = model_D(fake_images)
+                loss_G_bce = criterion_bce(output_fake_for_G, real_labels)
+                loss_G_mse = criterion_mse(fake_images, real_images)
+                loss_G_perceptual = criterion_perceptual((fake_images + 1) / 2, (real_images + 1) / 2)
+                loss_G = loss_G_bce + loss_G_mse + lambda_perceptual * loss_G_perceptual
+                loss_G.backward()
+                optimizer_G.step()
+                running_loss_G += loss_G.item()
+                running_loss_G_bce += loss_G_bce.item()
+                running_loss_G_mse += loss_G_mse.item()
+                running_loss_G_perceptual += loss_G_perceptual.item()
 
         avg_train_loss_G = running_loss_G / len(train_loader)
         avg_train_loss_D = running_loss_D / len(train_loader)
@@ -197,54 +201,56 @@ if __name__ == "__main__":
         val_losses_G.append(avg_val_loss_G)
         print(f'[INFO] Epoch {epoch+1}/{EPOCHS}, Val Gen Loss: {avg_val_loss_G:.4f}')
 
-        # --- Gráfica de pérdidas ---
-        plt.figure(figsize=(8,5))
-        plt.plot(train_losses_G, label='Train Gen Loss')
-        plt.plot(train_losses_D, label='Train Disc Loss')
-        plt.plot(val_losses_G, label='Val Gen Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Evolución de la pérdida GAN (Generador y Discriminador)')
-        plt.legend()
-        plt.grid()
-        plt.tight_layout()
-        save_path = os.path.join(RESULTS_PATH, f'gan_loss_epoch_{epoch+1}.png')
-        plt.savefig(save_path)
-        print(f"[INFO] Gráfica guardada en: {save_path}")
-        plt.close()
+        # Guardar gráficas y ejemplos solo cada SAVE_FREQ epochs o en el último epoch
+        if (epoch + 1) % SAVE_FREQ == 0 or (epoch + 1) == EPOCHS:
+            # --- Gráfica de pérdidas ---
+            plt.figure(figsize=(8,5))
+            plt.plot(train_losses_G, label='Train Gen Loss')
+            plt.plot(train_losses_D, label='Train Disc Loss')
+            plt.plot(val_losses_G, label='Val Gen Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.title('Evolución de la pérdida GAN (Generador y Discriminador)')
+            plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            save_path = os.path.join(RESULTS_PATH, f'gan_loss_epoch_{epoch+1}.png')
+            plt.savefig(save_path)
+            print(f"[INFO] Gráfica guardada en: {save_path}")
+            plt.close()
 
-        # --- Gráfica de pérdidas por tipo ---
-        plt.figure(figsize=(8,5))
-        plt.plot(train_losses_G_bce, label='Gen BCE Loss')
-        plt.plot(train_losses_G_mse, label='Gen MSE Loss')
-        plt.plot(train_losses_G_perceptual, label='Gen Perceptual Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Pérdidas del Generador por tipo')
-        plt.legend()
-        plt.grid()
-        plt.tight_layout()
-        save_path_types = os.path.join(RESULTS_PATH, f'gan_gen_loss_types_epoch_{epoch+1}.png')
-        plt.savefig(save_path_types)
-        print(f"[INFO] Gráfica de pérdidas por tipo guardada en: {save_path_types}")
-        plt.close()
+            # --- Gráfica de pérdidas por tipo ---
+            plt.figure(figsize=(8,5))
+            plt.plot(train_losses_G_bce, label='Gen BCE Loss')
+            plt.plot(train_losses_G_mse, label='Gen MSE Loss')
+            plt.plot(train_losses_G_perceptual, label='Gen Perceptual Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.title('Pérdidas del Generador por tipo')
+            plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            save_path_types = os.path.join(RESULTS_PATH, f'gan_gen_loss_types_epoch_{epoch+1}.png')
+            plt.savefig(save_path_types)
+            print(f"[INFO] Gráfica de pérdidas por tipo guardada en: {save_path_types}")
+            plt.close()
 
-        # --- Guardar ejemplos generados ---
-        with torch.no_grad():
-            val_labels_batch = val_labels.to(device)
-            outputs = model_G(val_labels_batch)
-            outputs = (outputs + 1) / 2
-            for i in range(min(NUM_EJEMPLOS, outputs.size(0))):
-                img = outputs[i].cpu()
-                img = img.squeeze(0) if img.dim() == 3 and img.size(0) == 1 else img
-                from torchvision import transforms as T
-                img_pil = T.ToPILImage()(img)
-                idx_letra = val_labels[i].item()
-                letra = VOCAB[idx_letra]
-                img_name = f'epoch_{epoch+1}_example_{i+1}_{letra}.png'
-                img_path = os.path.join(EXAMPLES_PATH, img_name)
-                img_pil.save(img_path)
-            print(f"[INFO] Ejemplos generados guardados en: {EXAMPLES_PATH}")
+            # --- Guardar ejemplos generados ---
+            with torch.no_grad():
+                val_labels_batch = val_labels.to(device)
+                outputs = model_G(val_labels_batch)
+                outputs = (outputs + 1) / 2
+                for i in range(min(NUM_EJEMPLOS, outputs.size(0))):
+                    img = outputs[i].cpu()
+                    img = img.squeeze(0) if img.dim() == 3 and img.size(0) == 1 else img
+                    from torchvision import transforms as T
+                    img_pil = T.ToPILImage()(img)
+                    idx_letra = val_labels[i].item()
+                    letra = VOCAB[idx_letra]
+                    img_name = f'epoch_{epoch+1}_example_{i+1}_{letra}.png'
+                    img_path = os.path.join(EXAMPLES_PATH, img_name)
+                    img_pil.save(img_path)
+                print(f"[INFO] Ejemplos generados guardados en: {EXAMPLES_PATH}")
 
     # --- Tiempo total ---
     current_time = time.time()
