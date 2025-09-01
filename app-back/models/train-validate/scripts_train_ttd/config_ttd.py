@@ -8,6 +8,8 @@
 
     ## GENERADOR
 
+NOISE_DIM = 32  # Dimensión del vector de ruido latente para el generador ttd_model
+
 N = 5  # bloques upsampling de ttd_model
 #   ↑ Subir: más bloques, mayor capacidad y profundidad, pero más coste computacional.
 #   ↓ Bajar: menos bloques, modelo más simple, menos capacidad de representación.
@@ -55,7 +57,7 @@ DROPOUT_DISC = 0.15  # Dropout para el discriminador
 
 #---------------------------------------------------------------------------------------------------------------------------------
 
-BATCH_SIZE = 36  # Número de muestras procesadas en cada batch de entrenamiento
+BATCH_SIZE = 16  # Número de muestras procesadas en cada batch de entrenamiento
 #   ↑ Subir: entrenamiento más rápido (si tienes suficiente memoria), gradientes más estables.
 #   ↓ Bajar: entrenamiento más lento, gradientes más ruidosos, útil si tienes poca memoria.
 
@@ -100,20 +102,20 @@ GENERATOR_STEPS = 3  # Número de pasos del generador por cada paso del discrimi
 
 #---------------------------------------------------------------------------------------------------------------------------------
 
-NOISE_STD_GAUSSIAN = 0.01         # Desviación estándar para ruido gaussiano.
+NOISE_STD_GAUSSIAN = 0.012         # Desviación estándar para ruido gaussiano.
 #   ↑ Subir: añade más ruido gaussiano, imágenes más "borrosas", puede dificultar el aprendizaje si es muy alto.
 #   ↓ Bajar: menos ruido, imágenes más limpias, menos robustez ante perturbaciones.
 
-NOISE_AMOUNT_SALT_PEPPER = 0.002   # Proporción para ruido sal y pimienta.
+NOISE_AMOUNT_SALT_PEPPER = 0.0015   # Proporción para ruido sal y pimienta.
 #   ↑ Subir: más píxeles aleatorios blancos/negros, puede dificultar la tarea del discriminador.
 #   ↓ Bajar: menos píxeles alterados, menos robustez ante este tipo de ruido.
 
-NOISE_LOW_UNIFORM = -0.01         # Límite inferior para ruido uniforme
-NOISE_HIGH_UNIFORM = 0.01         # Límite superior para ruido uniforme
+NOISE_LOW_UNIFORM = -0.0055         # Límite inferior para ruido uniforme
+NOISE_HIGH_UNIFORM = 0.0055         # Límite superior para ruido uniforme
 #   ↑ Ampliar rango: más variación aleatoria en los píxeles, más perturbación.
 #   ↓ Reducir rango: menos variación, menos efecto del ruido.
 
-NOISE_STD_SPECKLE = 0.01          # Desviación estándar para ruido speckle.
+NOISE_STD_SPECKLE = 0.005         # Desviación estándar para ruido speckle.
 #   ↑ Subir: más interferencia multiplicativa, puede simular ruido de sensores.
 #   ↓ Bajar: menos interferencia, imágenes más limpias.
 

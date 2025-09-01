@@ -36,3 +36,7 @@ def blur_noise(img, kernel_size=NOISE_KERNEL_BLUR):
     kernel = torch.ones((channels, 1, kernel_size, kernel_size), device=img.device) / (kernel_size * kernel_size)
     img = F.pad(img, [kernel_size//2]*4, mode='reflect')
     return F.conv2d(img, kernel, groups=channels)
+
+def latent_noise(batch_size, noise_dim, device):
+    """Genera un vector de ruido latente para el generador."""
+    return torch.randn(batch_size, noise_dim, device=device)

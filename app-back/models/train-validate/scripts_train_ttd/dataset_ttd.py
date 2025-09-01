@@ -36,10 +36,10 @@ class DictaDataset(Dataset):
         return len(self.data)
 
     def get_random_jitter_values(self):
-        brightness = random.uniform(0.7, 1.5)
+        brightness = random.uniform(0.7, 1.3)
         contrast = random.uniform(0.8, 1.2)
         saturation = random.uniform(0.8, 1.2)
-        hue = random.uniform(0, 0.4)
+        hue = random.uniform(0, 0.35)
         angle = random.uniform(-15, 15)
         return brightness, contrast, saturation, hue, angle
 

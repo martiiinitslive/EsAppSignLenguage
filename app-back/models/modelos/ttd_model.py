@@ -26,6 +26,7 @@ LEAKY_RELU_SLOPE = config_ttd.LEAKY_RELU_SLOPE
 DROPOUT_ENCODER = config_ttd.DROPOUT_ENCODER
 DROPOUT_DECODER = config_ttd.DROPOUT_DECODER
 DROPOUT_DISC = config_ttd.DROPOUT_DISC
+NOISE_DIM = config_ttd.NOISE_DIM
 
 class SelfAttention(nn.Module):
     def __init__(self, in_dim):
@@ -50,9 +51,10 @@ class SelfAttention(nn.Module):
         out = self.norm(out)  # Normalización opcional
         return out
 class TextToDictaModel(nn.Module):
-    def __init__(self, vocab_size, embedding_dim=EMBEDDING_DIM, img_size=IMG_SIZE, init_channels=INIT_CHANNELS, init_map_size=INIT_MAP_SIZE):
+    def __init__(self, vocab_size, embedding_dim=EMBEDDING_DIM, img_size=IMG_SIZE, init_channels=INIT_CHANNELS, init_map_size=INIT_MAP_SIZE, noise_dim=NOISE_DIM):
         super(TextToDictaModel, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.noise_dim = noise_dim
         self.img_size = img_size
         self.init_map_size = init_map_size
         self.init_channels = init_channels
@@ -76,7 +78,7 @@ class TextToDictaModel(nn.Module):
         dec5_out = 8
 
         self.fc = nn.Sequential(
-            nn.Linear(embedding_dim, self.init_channels * self.init_map_size * self.init_map_size),
+            nn.Linear(embedding_dim + noise_dim, self.init_channels * self.init_map_size * self.init_map_size),
             nn.LeakyReLU(self.leaky_relu_slope),
             nn.Dropout(DROPOUT_ENCODER)
         )
@@ -147,11 +149,14 @@ class TextToDictaModel(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-    def forward(self, x):
+    def forward(self, x, noise=None):
         emb = self.embedding(x)
         if emb.dim() > 2:
             emb = emb.squeeze(1)
-        out = self.fc(emb)
+        if noise is None:
+            noise = torch.randn(emb.size(0), self.noise_dim, device=emb.device)
+        emb_noise = torch.cat([emb, noise], dim=1)
+        out = self.fc(emb_noise)
         out = out.view(-1, self.init_channels, self.init_map_size, self.init_map_size)
 
         # Encoder

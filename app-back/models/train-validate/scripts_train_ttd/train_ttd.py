@@ -13,6 +13,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import models
 import torch.nn.functional as F
+import json
+import inspect
 
 # Importación absoluta de los módulos
 import sys, os
@@ -336,3 +338,15 @@ if __name__ == "__main__":
     DISC_PATH = os.path.join(base_path, 'DISC_ttd_model_final.pth')
     torch.save(model_D.state_dict(), DISC_PATH)
     print(f'[INFO] Discriminador guardado al finalizar en: {DISC_PATH}')
+
+    # --- Guardar configuración usada en el entrenamiento ---
+    import config_ttd
+    config_dict = {}
+    for name, value in inspect.getmembers(config_ttd):
+        if not name.startswith("__") and not inspect.ismodule(value) and not inspect.isfunction(value):
+            config_dict[name] = value
+
+    CONFIG_PATH = os.path.join(base_path, 'GEN_ttd_model_config.json')
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(config_dict, f, ensure_ascii=False, indent=4)
+    print(f'[INFO] Configuración guardada al finalizar en: {CONFIG_PATH}')

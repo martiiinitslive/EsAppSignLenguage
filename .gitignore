@@ -20,6 +20,7 @@ __pycache__/
 **data/
 **/models/**/*.pt
 **/models/**/*.pth
+**/models/
 **/notebooks/
 **/imagenes/
 app-back/utils/
