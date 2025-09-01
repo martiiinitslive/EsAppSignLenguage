@@ -30,13 +30,13 @@ class DictaDataset(Dataset):
                 if img_name.lower().endswith(('.png', '.jpg', '.jpeg')):
                     img_path = os.path.join(letter_dir, img_name)
                     self.data.append((idx, img_path))
-        print(f"Total de imágenes encontradas: {len(self.data)}")
+        print(f"[INFO] Total de imágenes encontradas: {len(self.data)}")
 
     def __len__(self):
         return len(self.data)
 
     def get_random_jitter_values(self):
-        brightness = random.uniform(0.7, 1.75)
+        brightness = random.uniform(0.7, 1.5)
         contrast = random.uniform(0.8, 1.2)
         saturation = random.uniform(0.8, 1.2)
         hue = random.uniform(0, 0.4)
@@ -63,6 +63,7 @@ class DictaDataset(Dataset):
             image = F.adjust_hue(image, hue)
             image = F.rotate(image, angle)
             image = transforms.ToTensor()(image)
+            #image = transforms.Normalize(mean=[0.5], std=[0.5])(image)
         except Exception as e:
             print(f"[ERROR] Fallo al cargar imagen: {img_path}. Error: {e}")
             # Devuelve un tensor de ceros si la imagen falla

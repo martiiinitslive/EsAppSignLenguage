@@ -21,7 +21,14 @@ sys.path.append(modelos_path)
 from ttd_model import TextToDictaModel, DictaDiscriminator
 from dataset_ttd import DictaDataset
 from losses_ttd import PerceptualLoss, BCELoss, MSELoss
-from config_ttd import IMG_SIZE, EMBEDDING_DIM, VOCAB, BATCH_SIZE, EPOCHS, LAMBDA_PERCEPTUAL, NUM_EJEMPLOS, LR_G, LR_D, SAVE_FREQ, SAVE_FREQ_GRAPHS, SAVE_FREQ_IMAGES, GENERATOR_STEPS
+from config_ttd import (
+    IMG_SIZE, EMBEDDING_DIM, VOCAB, BATCH_SIZE, EPOCHS, LAMBDA_PERCEPTUAL, NUM_EJEMPLOS, LR_G, LR_D,
+    SAVE_FREQ_GRAPHS, SAVE_FREQ_IMAGES, GENERATOR_STEPS,
+    #NOISE_STD_GAUSSIAN, NOISE_AMOUNT_SALT_PEPPER, NOISE_LOW_UNIFORM, NOISE_HIGH_UNIFORM,
+    #NOISE_STD_SPECKLE, NOISE_KERNEL_BLUR,
+    INIT_CHANNELS 
+)
+from noises_ttd import gaussian_noise, salt_and_pepper_noise, uniform_noise, speckle_noise, blur_noise
 
 if __name__ == "__main__":
     # Definir el dispositivo de cómputo (GPU si está disponible, si no CPU)
@@ -29,7 +36,7 @@ if __name__ == "__main__":
     print(f"[INFO] Dispositivo seleccionado para entrenamiento: {device}")
     if device.type == "cuda":
         print(f"[INFO] Nombre de GPU: {torch.cuda.get_device_name(0)}")
-        print(f"[INFO] Memoria total GPU: {torch.cuda.get_device_properties(0).total_memory // (1024 ** 2)} MB")
+        #print(f"[INFO] Memoria total GPU: {torch.cuda.get_device_properties(0).total_memory // (1024 ** 2)} MB")
     else:
         print("[WARNING] Entrenando en CPU. El entrenamiento será mucho más lento.")
 
@@ -47,16 +54,15 @@ if __name__ == "__main__":
     REAL_EXAMPLES_PATH = os.path.join(BASE_DIR, 'app-back', 'models', 'train-validate', 'scripts_train_ttd', 'imagenes', 'ejemplos-reales-dataset')
     os.makedirs(REAL_EXAMPLES_PATH, exist_ok=True)
 
-    print(f"[DEBUG] DATASET_DIR: {DATASET_DIR}")
-
+    #print(f"[DEBUG] DATASET_DIR: {DATASET_DIR}")
 
     # Carga el dataset y lo divide en entrenamiento/validación (80/20)
     full_dataset = DictaDataset(DATASET_DIR, VOCAB, IMG_SIZE)
-    print(f"[DEBUG] Total imágenes en dataset: {len(full_dataset)}")
+    #print(f"[DEBUG] Total imágenes en dataset: {len(full_dataset)}")
     train_size = int(0.8 * len(full_dataset))
-    print(f"[DEBUG] Tamaño del conjunto de entrenamiento: {train_size}")
+    #print(f"[DEBUG] Tamaño del conjunto de entrenamiento: {train_size}")
     val_size = len(full_dataset) - train_size
-    print(f"[DEBUG] Tamaño del conjunto de validación: {val_size}")
+    #print(f"[DEBUG] Tamaño del conjunto de validación: {val_size}")
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     train_loader = DataLoader(
         train_dataset,
@@ -73,16 +79,22 @@ if __name__ == "__main__":
         pin_memory=True
     )
 
-    model_G = TextToDictaModel(vocab_size=len(VOCAB), embedding_dim=EMBEDDING_DIM, img_size=IMG_SIZE).to(device)
+    model_G = TextToDictaModel(
+        vocab_size=len(VOCAB),
+        embedding_dim=EMBEDDING_DIM,
+        img_size=IMG_SIZE,
+        init_channels=INIT_CHANNELS 
+    ).to(device)
     model_D = DictaDiscriminator(img_size=IMG_SIZE, in_channels=3).to(device)
 
     optimizer_G = optim.Adam(model_G.parameters(), lr=LR_G)
     optimizer_D = optim.Adam(model_D.parameters(), lr=LR_D)
 
+    # Instancia las pérdidas usando el dispositivo actual, inicializacion de perdidas
     criterion_bce = BCELoss().to(device)
     criterion_mse = MSELoss().to(device)
-    criterion_perceptual = PerceptualLoss().to(device)
-    lambda_perceptual = LAMBDA_PERCEPTUAL  # Ajusta este valor en config_ttd.py
+    criterion_perceptual = PerceptualLoss(device=device).to(device)
+    lambda_perceptual = LAMBDA_PERCEPTUAL
 
     train_losses_G = []
     train_losses_D = []
@@ -113,9 +125,17 @@ if __name__ == "__main__":
     train_losses_G_perceptual = []
 
     # Bucle principal de entrenamiento
+    train_times = []
+    val_times = []
+
     for epoch in range(EPOCHS):
         print(f"[INFO] Comenzando epoch {epoch+1}/{EPOCHS}...")
         print(f"[INFO] GPU disponible: {torch.cuda.is_available()} | Dispositivo actual: {device}")
+        #print(f"[CONTROL] Ruido aplicado en epoch {epoch+1}: gaussiano(std={NOISE_STD_GAUSSIAN}), sal y pimienta(amount={NOISE_AMOUNT_SALT_PEPPER}), uniforme(low={NOISE_LOW_UNIFORM}, high={NOISE_HIGH_UNIFORM}), speckle(std={NOISE_STD_SPECKLE}), blur(kernel={NOISE_KERNEL_BLUR})")
+
+        # --- Tiempo de entrenamiento ---
+        train_start = time.time()
+
         model_G.train()
         model_D.train()
         running_loss_G = 0.0
@@ -124,32 +144,54 @@ if __name__ == "__main__":
         running_loss_G_mse = 0.0
         running_loss_G_perceptual = 0.0
 
+        # --- Control de pasos generador/discriminador por epoch ---
+        #print(f"[CONTROL] GENERATOR_STEPS: {GENERATOR_STEPS} (El generador se entrena {GENERATOR_STEPS} vez/veces por cada paso del discriminador)")
+
         for i, (labels, real_images, _) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1} - Train")):
             labels, real_images = labels.to(device), real_images.to(device)
             batch_size = real_images.size(0)
 
-            # --- Entrenamiento del Discriminador ---
-            optimizer_D.zero_grad()
+            # Define los labels para ambos bloques
             real_labels = torch.ones(batch_size, 1, device=device)
             fake_labels = torch.zeros(batch_size, 1, device=device)
 
-            # Imágenes reales
-            output_real = model_D(real_images)
-            loss_real = criterion_bce(output_real, real_labels)
+            # --- Entrenamiento del Discriminador ---
+            if (epoch % GENERATOR_STEPS) == (GENERATOR_STEPS - 1):
+                optimizer_D.zero_grad()
 
-            # Imágenes generadas (falsas)
-            fake_images = model_G(labels)
-            output_fake = model_D(fake_images.detach())
-            loss_fake = criterion_bce(output_fake, fake_labels)
+                # Aplica ruido a las imágenes reales y generadas
+                real_images_noisy = gaussian_noise(real_images)
+                real_images_noisy = salt_and_pepper_noise(real_images_noisy)
+                real_images_noisy = blur_noise(real_images_noisy)
+                real_images_noisy = torch.clamp(real_images_noisy, -1, 1)
 
-            # Pérdida total del discriminador
-            loss_D = (loss_real + loss_fake) / 2
-            loss_D.backward()
-            optimizer_D.step()
-            running_loss_D += loss_D.item()
+                fake_images = model_G(labels)
+                fake_images_noisy = gaussian_noise(fake_images.detach())
+                fake_images_noisy = salt_and_pepper_noise(fake_images_noisy)
+                fake_images_noisy = blur_noise(fake_images_noisy)
+                fake_images_noisy = torch.clamp(fake_images_noisy, -1, 1)
 
-            # --- Entrenamiento del Generador ---
+                output_real = model_D(real_images_noisy)
+                loss_real = criterion_bce(output_real, real_labels)
+
+                output_fake = model_D(fake_images_noisy)
+                loss_fake = criterion_bce(output_fake, fake_labels)
+
+                loss_D = (loss_real + loss_fake) / 2
+
+                # Control de pérdidas anómalas
+                if torch.isnan(loss_D):
+                    print(f"[ERROR] Pérdida NaN detectada en epoch {epoch+1}, batch {i}")
+                if loss_D.item() > 10:
+                    print(f"[WARNING] Pérdida alta: loss_D={loss_D.item():.2f} en epoch {epoch+1}, batch {i}")
+
+                loss_D.backward()
+                optimizer_D.step()
+                running_loss_D += loss_D.item()
+
+            # --- Entrenamiento del Generador (siempre) ---
             optimizer_G.zero_grad()
+            fake_images = model_G(labels)
             output_fake_for_G = model_D(fake_images)
             loss_G_bce = criterion_bce(output_fake_for_G, real_labels)
             loss_G_mse = criterion_mse(fake_images, real_images)
@@ -162,6 +204,11 @@ if __name__ == "__main__":
             running_loss_G_mse += loss_G_mse.item()
             running_loss_G_perceptual += loss_G_perceptual.item()
 
+            # Control de gradientes
+            for name, param in model_G.named_parameters():
+                if param.grad is not None and torch.all(param.grad == 0):
+                    print(f"[WARNING] Gradiente cero en {name} del generador en epoch {epoch+1}")
+
         avg_train_loss_G = running_loss_G / len(train_loader)
         avg_train_loss_D = running_loss_D / len(train_loader)
         avg_train_loss_G_bce = running_loss_G_bce / len(train_loader)
@@ -173,15 +220,24 @@ if __name__ == "__main__":
         train_losses_G_mse.append(avg_train_loss_G_mse)
         train_losses_G_perceptual.append(avg_train_loss_G_perceptual)
 
-        # --- Tiempo ---
+        train_end = time.time()
+        train_elapsed = train_end - train_start
+        train_times.append(train_elapsed)
+
+        # --- Tiempo acumulado ---
         current_time = time.time()
         elapsed_time = current_time - start_time
         elapsed_hours = int(elapsed_time // 3600)
         elapsed_minutes = int((elapsed_time % 3600) // 60)
         elapsed_seconds = int(elapsed_time % 60)
-        print(f'[INFO] Epoch {epoch+1}/{EPOCHS}, Gen Loss: {avg_train_loss_G:.4f}, Disc Loss: {avg_train_loss_D:.4f}, Tiempo total: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d}')
+        avg_train_time = sum(train_times) / len(train_times)
+        avg_train_h = int(avg_train_time // 3600)
+        avg_train_m = int((avg_train_time % 3600) // 60)
+        avg_train_s = int(avg_train_time % 60)
+        print(f'[CONTROL] Train terminado | Tiempo acumulado: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d} | Tiempo promedio train: {avg_train_h}:{avg_train_m:02d}:{avg_train_s:02d}')
 
         # --- Validación ---
+        val_start = time.time()
         model_G.eval()
         val_loss_G = 0.0
         with torch.no_grad():
@@ -193,6 +249,21 @@ if __name__ == "__main__":
                 loss_perceptual = criterion_perceptual((outputs + 1) / 2, (images + 1) / 2)
                 loss = loss_mse + lambda_perceptual * loss_perceptual
                 val_loss_G += loss.item()
+        val_end = time.time()
+        val_elapsed = val_end - val_start
+        val_times.append(val_elapsed)
+
+        avg_val_time = sum(val_times) / len(val_times)
+        avg_val_h = int(avg_val_time // 3600)
+        avg_val_m = int((avg_val_time % 3600) // 60)
+        avg_val_s = int(avg_val_time % 60)
+        current_time = time.time()
+        elapsed_time = current_time - start_time
+        elapsed_hours = int(elapsed_time // 3600)
+        elapsed_minutes = int((elapsed_time % 3600) // 60)
+        elapsed_seconds = int(elapsed_time % 60)
+        print(f'[CONTROL] Val terminado | Tiempo acumulado: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d} | Tiempo promedio val: {avg_val_h}:{avg_val_m:02d}:{avg_val_s:02d}')
+
         avg_val_loss_G = val_loss_G / len(val_loader) if len(val_loader) > 0 else 0
         val_losses_G.append(avg_val_loss_G)
         print(f'[INFO] Epoch {epoch+1}/{EPOCHS}, Val Gen Loss: {avg_val_loss_G:.4f}')
@@ -253,7 +324,7 @@ if __name__ == "__main__":
     elapsed_hours = int(elapsed_time // 3600)
     elapsed_minutes = int((elapsed_time % 3600) // 60)
     elapsed_seconds = int(elapsed_time % 60)
-    print(f'[INFO] Tiempo total de entrenamiento: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d}')
+    print(f'[CONTROL] Tiempo total de entrenamiento: {elapsed_hours}:{elapsed_minutes:02d}:{elapsed_seconds:02d}')
 
     # --- Guardar modelos entrenados al finalizar el script ---
     base_path = os.path.join(BASE_DIR, 'app-back', 'models', 'modelos_trained', 'ttd_model')
