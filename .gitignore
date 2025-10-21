@@ -26,7 +26,7 @@ __pycache__/
 **/utils/
 
 # Ignorar la carpeta de pruebas de Blender
-**/pruebas_blender/
+**/blender/
 
 # --- FRONTEND ---
 **/node_modules/
