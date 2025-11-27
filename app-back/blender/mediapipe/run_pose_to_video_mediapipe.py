@@ -244,7 +244,7 @@ def _draw_hand_realistic(img, landmarks, handedness="Left", connections=None):
     base_widths = [34, 28, 30, 32, 30]
     widths = [w * 0.013 + bw * img_scale for bw in base_widths]
 
-    def _capsule(p0, p1, r0, r1, color):
+    def _capsule_on_layer(target, p0, p1, r0, r1, color):
         vec = p1 - p0
         length = max(float(np.linalg.norm(vec)), 1.0)
         steps = max(int(math.ceil(length / 3.0)), 1)
@@ -252,11 +252,14 @@ def _draw_hand_realistic(img, landmarks, handedness="Left", connections=None):
             t = i / steps
             center = p0 * (1.0 - t) + p1 * t
             radius = int(max(1.0, lerp(r0, r1, t)))
-            cv2.circle(layer, tuple(np.round(center).astype(int)), radius, color.tolist(), -1, cv2.LINE_AA)
+            cv2.circle(target, tuple(np.round(center).astype(int)), radius, color.tolist() if isinstance(color, np.ndarray) else color, -1, cv2.LINE_AA)
 
     pts_arr = np.array([p[:2] for p in pts], dtype=np.float32)
 
+    # --- Draw each finger into its own mask so we can outline them separately ---
+    finger_masks = []
     for chain_idx, chain in enumerate(FINGER_CHAINS):
+        mask = np.zeros((h, w), dtype=np.uint8)
         width = widths[chain_idx]
         for seg_idx in range(len(chain) - 1):
             a = chain[seg_idx]
@@ -265,48 +268,123 @@ def _draw_hand_realistic(img, landmarks, handedness="Left", connections=None):
             end = pts_arr[b]
             r0 = width * (0.9 - 0.12 * seg_idx)
             r1 = width * (0.75 - 0.15 * seg_idx)
-            _capsule(start, end, r0, r1, SKIN_BASE)
+            # draw capsule into mask (white)
+            _capsule_on_layer(mask, start, end, r0, r1, np.array([255], dtype=np.uint8))
+        # tip highlight on mask (so findContours gets clean tip)
+        tip = tuple(np.round(pts_arr[chain[-1]]).astype(int))
+        cv2.circle(mask, tip, int(max(3, width * 0.4)), 255, -1, cv2.LINE_AA)
+        finger_masks.append((mask, width, chain_idx))
+
+    # Merge colored finger fills into layer
+    for mask, width, chain_idx in finger_masks:
+        colored = cv2.merge([mask * (SKIN_BASE[0] / 255.0).astype(np.uint8),
+                             mask * (SKIN_BASE[1] / 255.0).astype(np.uint8),
+                             mask * (SKIN_BASE[2] / 255.0).astype(np.uint8)])
+        # Instead of naive merge, paint SKIN_BASE where mask>0
+        layer[mask > 0] = SKIN_BASE
+
+    # per-finger outlines and inner strokes
+    for mask, width, chain_idx in finger_masks:
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            continue
+        # pick largest contour
+        contour = max(contours, key=cv2.contourArea)
+        # outer outline
+        thickness_outer = max(2, int(4 * img_scale))
+        cv2.drawContours(layer, [contour], -1, OUTLINE_COLOR, thickness=thickness_outer, lineType=cv2.LINE_AA)
+        # inner soft stroke (lighter)
+        thickness_inner = max(1, int(2 * img_scale))
+        inner_color = tuple(min(255, c + 18) for c in SKIN_SHADOW.tolist()) if isinstance(SKIN_SHADOW, np.ndarray) else SKIN_SHADOW
+        cv2.drawContours(layer, [contour], -1, inner_color, thickness=thickness_inner, lineType=cv2.LINE_AA)
+
+    # Add fingertip highlights (light color) on top
+    for chain_idx, chain in enumerate(FINGER_CHAINS):
+        width = widths[chain_idx]
         tip = tuple(np.round(pts_arr[chain[-1]]).astype(int))
         cv2.circle(layer, tip, int(max(3, width * 0.4)), SKIN_LIGHT.tolist(), -1, cv2.LINE_AA)
 
+    # Knuckle shading (same as before)
     knuckles = [2, 3, 6, 7, 10, 11, 14, 15, 18, 19]
     for idx in knuckles:
         center = tuple(np.round(pts_arr[idx]).astype(int))
         cv2.circle(layer, center, int(8 * img_scale + 6), SKIN_LIGHT.tolist(), -1, cv2.LINE_AA)
         cv2.circle(layer, center, int(8 * img_scale + 1), SKIN_BASE.tolist(), -1, cv2.LINE_AA)
 
-    for chain in FINGER_CHAINS[1:]:
-        tip = tuple(np.round(pts_arr[chain[-1]]).astype(int))
-        cv2.ellipse(layer, tip, (int(10 * img_scale + 6), int(6 * img_scale + 4)), 0, 0, 180, NAIL_COLOR, -1, cv2.LINE_AA)
-    thumb_tip = tuple(np.round(pts_arr[FINGER_CHAINS[0][-1]]).astype(int))
-    cv2.circle(layer, thumb_tip, int(8 * img_scale + 6), NAIL_COLOR, -1, cv2.LINE_AA)
+    # --- Separators between fingers when they are close ---
+    # sample points along each finger for distance tests
+    sampled = []
+    for chain_idx, chain in enumerate(FINGER_CHAINS):
+        samples = []
+        for seg_idx in range(len(chain) - 1):
+            a = chain[seg_idx]
+            b = chain[seg_idx + 1]
+            p0 = pts_arr[a]
+            p1 = pts_arr[b]
+            for t in (0.0, 0.33, 0.66, 1.0):
+                samples.append(p0 * (1 - t) + p1 * t)
+        sampled.append(np.array(samples))
+    # draw separators between adjacent fingers (index<->middle, middle<->ring, ring<->pinky)
+    for i in range(1, len(FINGER_CHAINS)):
+        pts_a = sampled[i]
+        pts_b = sampled[i+0] if i < len(sampled) else None
+        if pts_b is None:
+            continue
+        # compute closest pair
+        dists = np.linalg.norm(pts_a[:, None, :] - pts_b[None, :, :], axis=2)
+        min_idx = np.unravel_index(np.argmin(dists), dists.shape)
+        min_dist = dists[min_idx]
+        # threshold relative to finger width
+        threshold = (widths[max(0, i-1)] + widths[i]) * 0.9
+        if min_dist < threshold:
+            pa = tuple(np.round(pts_a[min_idx[0]]).astype(int))
+            pb = tuple(np.round(pts_b[min_idx[1]]).astype(int))
+            # draw thin dark separator (slightly blurred)
+            sep_thickness = max(1, int(2 * img_scale))
+            cv2.line(layer, pa, pb, OUTLINE_COLOR, thickness=sep_thickness, lineType=cv2.LINE_AA)
+            # add a tiny highlight along the separator to suggest a groove
+            mid = ((pa[0] + pb[0]) // 2, (pa[1] + pb[1]) // 2)
+            cv2.line(layer, pa, pb, tuple(min(255, c + 30) for c in SKIN_LIGHT.tolist()), thickness=max(1, int(1 * img_scale)), lineType=cv2.LINE_AA)
 
+    # Shadow mask based on depth (if available)
+    # Safely compute min/max of depths (depths may be a list)
+    depth_min = 0.0
+    depth_max = 0.0
     if depths:
-        depth_arr = np.array(depths, dtype=np.float32)
-        depth_min = depth_arr.min()
-        depth_max = depth_arr.max()
-        if depth_max - depth_min > 1e-6:
-            z_norm = (depth_arr - depth_min) / (depth_max - depth_min)
+        try:
+            depth_arr = np.asarray(depths, dtype=np.float32)
+            if depth_arr.size > 0:
+                depth_min = float(depth_arr.min())
+                depth_max = float(depth_arr.max())
+        except Exception:
+            depth_min = 0.0
+            depth_max = 0.0
+    try:
+        if depths and (depth_max - depth_min) > 1e-6:
+            z_norm = (np.asarray(depths, dtype=np.float32) - depth_min) / (depth_max - depth_min)
             wrist_depth = float(z_norm[0])
             darkness = wrist_depth * 0.35 + 0.2
         else:
             darkness = 0.25
-    else:
+    except Exception:
         darkness = 0.25
     shadow = cv2.GaussianBlur(layer, (0, 0), sigmaX=8, sigmaY=8)
     cv2.addWeighted(shadow, darkness, layer, 1.0 - darkness, 0, layer)
 
+    # Outline palm & finger skeleton
     for chain in FINGER_CHAINS:
         chain_pts = np.array([pts_arr[idx] for idx in chain], dtype=np.int32)
         cv2.polylines(layer, [chain_pts], False, OUTLINE_COLOR, thickness=int(6 * img_scale + 3), lineType=cv2.LINE_AA)
     cv2.polylines(layer, [palm_poly], True, OUTLINE_COLOR, thickness=int(7 * img_scale + 4), lineType=cv2.LINE_AA)
 
+    # subtle handedness tint
     if isinstance(handedness, str) and handedness.lower().startswith("right"):
         tint = np.array([10, 6, -4], dtype=np.float32)
     else:
         tint = np.array([0, 0, 0], dtype=np.float32)
-    layer = np.clip(layer.astype(np.float32) + HAND_TINT, 0.0, 255.0).astype(np.uint8)
+    layer = np.clip(layer.astype(np.float32) + tint, 0.0, 255.0).astype(np.uint8)
 
+    # blend
     alpha_mask = cv2.cvtColor(layer, cv2.COLOR_BGR2GRAY)
     alpha_mask = cv2.GaussianBlur(alpha_mask, (0, 0), sigmaX=5)
     alpha = cv2.normalize(alpha_mask.astype(np.float32), None, 0.0, 1.0, cv2.NORM_MINMAX)

@@ -231,22 +231,31 @@ def apply_pose_from_positionA(arm_obj, position_a_path, angles_json_path=None, p
     bpy.context.view_layer.objects.active = arm_obj
     bpy.ops.object.mode_set(mode='POSE')
 
-    # For each mapped index -> bone, try to orient bone along first matching connection
+    # For each mapped index -> bone, try to orient bone using the connection where index is the second element (a->b)
     for idx_str, info in mapped.items():
         bone_name = info.get('bone_name')
         if not bone_name:
             continue
         idx = int(idx_str)
         target_vec = None
-        for a,b in HAND_CONNECTIONS:
-            if a == idx:
-                target_vec = lm_vec(a,b)
-                break
+        used_neighbor = None
+        # prefer connections where idx is the 'b' (end) as in other functions
+        for a, b in HAND_CONNECTIONS:
             if b == idx:
-                target_vec = lm_vec(b,a)
+                target_vec = lm_vec(a, b)
+                used_neighbor = a
                 break
+        # if not found, try reversed where idx is the 'a'
         if target_vec is None:
-            # no direct connection found
+            for a, b in HAND_CONNECTIONS:
+                if a == idx:
+                    target_vec = lm_vec(a, b)
+                    used_neighbor = b
+                    # reverse direction for alignment to point from idx->neighbor
+                    if target_vec is not None:
+                        target_vec = -target_vec
+                    break
+        if target_vec is None:
             continue
 
         pbone = arm_obj.pose.bones.get(bone_name)
@@ -258,13 +267,38 @@ def apply_pose_from_positionA(arm_obj, position_a_path, angles_json_path=None, p
             if not ok:
                 print(f"[WARN] align failed for bone {bone_name}")
                 continue
+
+            # apply angle from angles_frame if available: look up joint idx
+            angle_val = None
+            if isinstance(angles_frame, dict):
+                jinfo = angles_frame.get(str(idx))
+                if isinstance(jinfo, dict):
+                    for pr in jinfo.get("pairs", []):
+                        neigh = pr.get("neighbors", [])
+                        if len(neigh) == 2 and used_neighbor is not None and (neigh[0] == used_neighbor or neigh[1] == used_neighbor):
+                            angle_val = pr.get("angle")
+                            if angle_val is not None:
+                                try:
+                                    angle_val = float(angle_val)
+                                except Exception:
+                                    angle_val = None
+                                break
+            if angle_val is not None:
+                # apply angle around local axis X by default (match other function)
+                if pbone.rotation_mode != 'XYZ':
+                    pbone.rotation_mode = 'XYZ'
+                e = pbone.rotation_euler
+                # assume X axis is flexion; use positive angle as measured
+                e.x += math.radians(angle_val)
+                pbone.rotation_euler = e
+
             if keyframe:
                 if pbone.rotation_mode == 'QUATERNION':
                     pbone.keyframe_insert(data_path='rotation_quaternion', frame=bpy.context.scene.frame_current)
                 else:
                     pbone.keyframe_insert(data_path='rotation_euler', frame=bpy.context.scene.frame_current)
         except Exception as e:
-            print(f"[WARN] failed to orient bone {bone_name}: {e}")
+            print(f"[WARN] failed to orient/apply angle to bone {bone_name}: {e}")
 
     bpy.ops.object.mode_set(mode='OBJECT')
     print('[INFO] apply_pose_from_positionA: applied landmarks to armature (angles may have been ignored)')

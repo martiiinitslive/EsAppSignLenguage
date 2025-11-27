@@ -161,12 +161,15 @@ def ensure_pose_mode(arm):
     if bpy.context.mode != 'POSE':
         bpy.ops.object.mode_set(mode='POSE')
 
-def reset_pose(arm):
-    """Resetea la pose."""
+def reset_pose(arm, only_bones=None):
+    """Resetea la pose. Si only_bones se pasa, solo afecta a esos huesos."""
+    targets = set(only_bones) if only_bones else None
     for pb in arm.pose.bones:
+        if targets is not None and pb.name not in targets:
+            continue
         try:
             pb.matrix_basis.identity()
-        except:
+        except Exception:
             pass
 
 def calculate_bone_rotation(pose_bone, start_world, end_world, armature):
@@ -307,16 +310,6 @@ def apply_pose_dict(arm, bones_dict):
                 if apply_quat_to_bone(pb, quat_data):
                     applied.append(bone_name)
 
-        # Aplicar posición (opcional)
-        if 'position' in bone_data:
-            try:
-                pos_data = bone_data['position']
-                pb.location = Vector([float(x) for x in pos_data])
-                if bone_name not in applied:
-                    applied.append(bone_name)
-            except Exception:
-                pass
-
     return applied
 
 def insert_keyframes(arm, applied_bones, frame):
@@ -420,6 +413,9 @@ def main():
     frame = 1
     scn.frame_start = frame
 
+    # Sólo reseteamos huesos de la mano que vamos a animar (evitamos mover brazos/codo)
+    finger_bones = set(MEDIAPIPE_TO_MAKEHUMAN.keys())
+
     for idx, pose_name in enumerate(seq):
         log(f"\n[{idx+1}/{len(seq)}] Procesando pose: {pose_name}")
 
@@ -446,7 +442,7 @@ def main():
             if not landmarks_blender and not bones_dict:
                 continue
 
-            reset_pose(arm)
+            reset_pose(arm, only_bones=finger_bones)
 
             if landmarks_blender and len(landmarks_blender) == 21:
                 applied = apply_landmarks_pose(arm, landmarks_blender)
