@@ -24,19 +24,19 @@ async def process_video(file: UploadFile = File(...)):
     with open(video_path, "wb") as buffer:
         buffer.write(await file.read())
 
-    # Extraer audio
+    # Extract audio
     audio_path = video_path + ".wav"
     extract_audio_from_video(video_path, audio_path)
 
-    # Convertir audio a texto
-    texto = speech_to_text(audio_path)
+    # Convert audio to text
+    text = speech_to_text(audio_path)
 
     # Model inference and image/video generation would go here (future integration)
-    # Por ahora, solo devolvemos el texto reconocido
+    # For now, return the recognized text only
 
     # Clean up temporary files
     os.remove(video_path)
     os.remove(audio_path)
 
     # Keep original Spanish key for backward compatibility, and add English key
-    return {"texto": texto, "text": texto}
+    return {"texto": text, "text": text}

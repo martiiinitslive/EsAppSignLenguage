@@ -918,7 +918,7 @@ def text_to_pose_sequence(text_input):
 
     return sequence
 
-def render_sequence_from_json(json_path, sequence, out_path=None, show=True, save=True, fps=None, width=None, height=None, speed_factor=None, apply_subtitles=True, soft_subtitles=False, subtitle_lang="eng", keep_sidecars=False, hand_style=HAND_RENDER_STYLE):
+def render_sequence_from_json(json_path, sequence, out_path=None, show=True, save=True, show_pip=True, fps=None, width=None, height=None, speed_factor=None, apply_subtitles=True, soft_subtitles=False, subtitle_lang="eng", keep_sidecars=False, hand_style=HAND_RENDER_STYLE):
     progress(f"Loading JSON: {json_path}")
     data = load_json(json_path)
     meta = data.get("meta", {}) if isinstance(data, dict) else {}
@@ -949,7 +949,8 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
     pip_height = int(h * 0.25)  # 25% of source height
     pip_margin = 15  # margin from edges
 
-    base_app_back = Path(__file__).resolve().parent.parent.parent
+    # base_app_back should point to the `app-back` folder (one level above this `mp` folder)
+    base_app_back = Path(__file__).resolve().parent.parent
     default_ref_dir = base_app_back / "data" / "dataset-en-bruto" / "asl_dataset" / "mediapipe_poses"
     default_videos_dir = base_app_back / "data" / "dataset-en-bruto" / "asl_dataset" / "videos" / "videos_de_las_letras"
     video_exts = (".mp4", ".avi", ".mov", ".mkv", ".webm")
@@ -1060,13 +1061,14 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                 else:
                     cv2.putText(canvas, "no landmarks", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (30,30,30), 2, cv2.LINE_AA)
 
-                # Add PiP (Picture-in-Picture) in the bottom-right corner
-                ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
-                x_pos = w - pip_width - pip_margin
-                y_pos = h - pip_height - pip_margin
-                canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
-                # Draw a border around the PiP
-                cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
+                # Add PiP (Picture-in-Picture) in the bottom-right corner (if enabled)
+                if show_pip and ref_img is not None:
+                    ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
+                    x_pos = w - pip_width - pip_margin
+                    y_pos = h - pip_height - pip_margin
+                    canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
+                    # Draw a border around the PiP
+                    cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
                 # draw inline subtitle if requested
                 if DRAW_SUBTITLES_INLINE:
                     _draw_inline_subtitle(canvas, cumulative)
@@ -1099,13 +1101,14 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
             for _ in range(duration_iter):
                 canvas = 255 * np.ones((h, w, 3), dtype="uint8")
                 cv2.putText(canvas, f"{pose_name} (no frames)", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (10,10,10), 3, cv2.LINE_AA)
-                # Add PiP (Picture-in-Picture) in the bottom-right corner
-                ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
-                x_pos = w - pip_width - pip_margin
-                y_pos = h - pip_height - pip_margin
-                canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
-                # Draw a border around the PiP
-                cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
+                # Add PiP (Picture-in-Picture) in the bottom-right corner (if enabled)
+                if show_pip and ref_img is not None:
+                    ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
+                    x_pos = w - pip_width - pip_margin
+                    y_pos = h - pip_height - pip_margin
+                    canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
+                    # Draw a border around the PiP
+                    cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
                 if DRAW_SUBTITLES_INLINE:
                     _draw_inline_subtitle(canvas, cumulative)
                 writer.write(canvas)
@@ -1126,11 +1129,15 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                 ass_path = out_path_obj.with_suffix(".ass")
                 progress(f"[SUBTITLES] Generating ASS file: {ass_path}")
                 progress(f"[SUBTITLES] frames_counts: {frames_counts} (total_frames={total_frames})")
-                # Generar ASS usando las duraciones reales por pose
+                # Generate ASS using the actual per-pose durations
                 # pass image width and pip_x to generate_ass_subtitles so it can avoid PiP overlap
                 try:
                     setattr(generate_ass_subtitles, "img_width", w)
-                    pip_left = w - pip_width - pip_margin
+                    # If PiP is shown, provide left-most x of PiP to subtitle generator
+                    if show_pip:
+                        pip_left = w - pip_width - pip_margin
+                    else:
+                        pip_left = None
                     setattr(generate_ass_subtitles, "pip_x", pip_left)
                 except Exception:
                     pass
@@ -1185,8 +1192,8 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
     return out_path
 
 def main():
-    # default JSON is at app-back/mp/poses_mediapipe_video.json (one level above src)
-    default_json = str(Path(__file__).resolve().parent.parent / "poses_mediapipe_video.json")
+    # default JSON is in the same `mp` folder as this script
+    default_json = str(Path(__file__).resolve().parent / "poses_mediapipe_video.json")
     default_out = str(OUTPUT_DIR / OUTPUT_NAME)
     ap = argparse.ArgumentParser(description="Render poses sequence into annotated video using MediaPipe-style JSON (no Blender)")
     ap.add_argument("--json", "-j", default=default_json, help="path to poses JSON")
@@ -1201,6 +1208,8 @@ def main():
     ap.add_argument("--subtitle-lang", dest="subtitle_lang", default="eng", help="ISO-639-2 language code for embedded subtitle track (default: eng)")
     ap.add_argument("--keep-sidecars", dest="keep_sidecars", action="store_true", help="Keep generated .ass/.srt sidecar files after embedding/burning")
     ap.add_argument("--hand-style", choices=["realistic", "wire"], default=HAND_RENDER_STYLE, help="Hand rendering method ('realistic' or 'wire').")
+    ap.add_argument("--no-subtitles", dest="generate_subtitles", action="store_false", default=True, help="Disable subtitle generation and embedding (default: generate)")
+    ap.add_argument("--no-pip", dest="show_pip", action="store_false", default=True, help="Disable Picture-in-Picture reference overlay in output")
     args = ap.parse_args()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
@@ -1224,9 +1233,9 @@ def main():
         sys.exit(1)
     # Call the renderer with the received parameters
     progress("Starting render...")
-    out = render_sequence_from_json(args.json, seq, out_path=args.out, show=False, save=True,
+    out = render_sequence_from_json(args.json, seq, out_path=args.out, show=False, save=True, show_pip=args.show_pip,
                                    fps=args.fps, width=args.width, height=args.height, speed_factor=args.speed,
-                                   apply_subtitles=True, soft_subtitles=args.soft_subtitles, subtitle_lang=args.subtitle_lang, keep_sidecars=args.keep_sidecars,
+                                   apply_subtitles=args.generate_subtitles, soft_subtitles=args.soft_subtitles, subtitle_lang=args.subtitle_lang, keep_sidecars=args.keep_sidecars,
                                    hand_style=args.hand_style)
     progress(f"Render finished. Output: {out}")
     return out
