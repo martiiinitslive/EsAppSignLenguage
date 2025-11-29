@@ -3,19 +3,23 @@ import speech_recognition as sr
 
 def speech_to_text(audio_path):
     """
-    Convierte un archivo de audio a texto usando SpeechRecognition y el motor de Google.
-    audio_path: ruta al archivo de audio (WAV recomendado)
-    return: texto reconocido o None si falla
+    Convert an audio file to text using SpeechRecognition (Google API).
+
+    Args:
+        audio_path: path to the audio file (WAV recommended)
+
+    Returns:
+        Recognized text string or None on failure.
     """
     recognizer = sr.Recognizer()
     with sr.AudioFile(audio_path) as source:
         audio = recognizer.record(source)
     try:
-        texto = recognizer.recognize_google(audio, language="es-ES")
-        return texto
+        text = recognizer.recognize_google(audio, language="es-ES")
+        return text
     except sr.UnknownValueError:
-        print("No se pudo entender el audio.")
+        print("Could not understand the audio.")
         return None
     except sr.RequestError as e:
-        print(f"Error al conectar con el servicio de reconocimiento: {e}")
+        print(f"Recognition service error: {e}")
         return None

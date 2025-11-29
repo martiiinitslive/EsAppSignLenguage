@@ -1,7 +1,8 @@
 """
-(Para el futuro) Módulo para convertir video de dictadología a texto.
+Module to convert dictation-style video to text (placeholder).
+Note: planned for future work.
 """
 
 def video_to_text(video_path):
-    # TODO: Implementar reconocimiento de texto a partir de video
+    # TODO: Implement text extraction from video (OCR / speech-to-text pipeline)
     pass

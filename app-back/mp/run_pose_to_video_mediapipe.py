@@ -20,86 +20,85 @@ import numpy as np
 # main canvas and overlays a reference image/video frame in the bottom-right
 # corner (Picture-in-Picture). Text subtitles are applied via ffmpeg in post-production.
 
-
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
-OUTPUT_NAME = "run_pose_to_video_mediapipe.mp4"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output_mp"
+OUTPUT_NAME = f"{Path(__file__).stem}.mp4"
 
 # ==========  SPEED_FACTOR ==========
-# SPEED_FACTOR: Controla la velocidad GLOBAL del vídeo (fps de salida)
-#   - Factor aplicado a los fps base (por defecto 30)
-#   - SPEED_FACTOR = 3.0 → fps_out = 30 * 3.0 = 90 fps (vídeo 3x más rápido)
-#   - SPEED_FACTOR = 0.5 → fps_out = 30 * 0.5 = 15 fps (vídeo 0.5x más lento)
-#   - Usado principalmente para acelerar/ralentizar todo el vídeo
-#   - Uso: python script.py --speed 2.0
+# SPEED_FACTOR: Controls the GLOBAL video speed (output fps)
+#   - Multiplies the base fps (default 30)
+#   - SPEED_FACTOR = 3.0 → fps_out = 30 * 3.0 = 90 fps (video 3x faster)
+#   - SPEED_FACTOR = 0.5 → fps_out = 30 * 0.5 = 15 fps (video 0.5x slower)
+#   - Used mainly to speed up / slow down the whole video
+#   - Usage example: python script.py --speed 2.0
 
 SPEED_FACTOR = 1.0
 
-#   - SPEED_FACTOR es un MULTIPLICADOR de fps (global)
-#   - FRAMES_PER_POSE es la DURACIÓN en frames de cada pose (local)
+#   - SPEED_FACTOR is a global FPS MULTIPLIER
+#   - FRAMES_PER_POSE is the DURATION in frames for each pose (local)
 
-# ========== PARAMETRIZACIÓN DE ENTRADA ==========
-# Variable parametrizable para el texto de entrada.
-# Formatos soportados:
-#   - Letras (A-Z): se convierten a MAYÚSCULAS → ["H", "E", "L", "L", "O"]
-#   - Números (0-9): se mantienen → ["1", "2", "3"]
-#   - Espacios " ": se convierten a pose "SPACE"
-#   - Puntos ".": se convierten a pose "PERIOD"
-#   - Comas ",": se convierten a pose "COMMA"
-# Ejemplos:
-#   INPUT_TEXT = "HELLO"          # → ["H", "E", "L", "L", "O"]
-#   INPUT_TEXT = "HELLO WORLD"    # → ["H", "E", "L", "L", "O", "SPACE", "W", "O", "R", "L", "D"]
-#   INPUT_TEXT = "HI."            # → ["H", "I", "PERIOD"]
-#   INPUT_TEXT = None             # → Usa --text o --poses de línea de comandos
-INPUT_TEXT = "lucia"  # Cambia a "HELLO", "HI THERE", etc. para usar texto fijo
+# ========== INPUT PARAMETERIZATION ==========
+# Configurable variable for input text.
+# Supported formats:
+#   - Letters (A-Z): converted to characters like ["H", "E", "L", "L", "O"]
+#   - Numbers (0-9): preserved as digits ["1", "2", "3"]
+#   - Spaces " ": become pose token "SPACE"
+#   - Periods ".": become pose token "PERIOD"
+#   - Commas ",": become pose token "COMMA"
+# Examples:
+#   INPUT_TEXT = "HELLO"          # -> ["H", "E", "L", "L", "O"]
+#   INPUT_TEXT = "HELLO WORLD"    # -> ["H","E","L","L","O","SPACE","W","O","R","L","D"]
+#   INPUT_TEXT = "HI."            # -> ["H","I","PERIOD"]
+#   INPUT_TEXT = None               # -> Use --text or --poses from CLI
+INPUT_TEXT = "lucia"  # Change to "HELLO", "HI THERE", etc. to use a fixed text
 
-# ========== PARAMETRIZACIÓN DE VELOCIDAD ==========
-# Controla cuántos frames dura cada letra en el vídeo
-# Valores más altos = vídeo más lento (más tiempo en cada letra)
-# Valores más bajos = vídeo más rápido
-# Ejemplos:
-#   FRAMES_PER_POSE = 10   # Muy rápido
-#   FRAMES_PER_POSE = 30   # Normal (por defecto)
-#   FRAMES_PER_POSE = 60   # Lento (2x más tiempo)
-#   FRAMES_PER_POSE = 120  # Muy lento (4x más tiempo)
-FRAMES_PER_POSE = 60  # Ajusta este valor para ralentizar/acelerar
+# ========== SPEED PARAMETERS ==========
+# Controls how many frames each character/pose lasts in the output video.
+# Higher values = slower video (more time per character).
+# Lower values = faster video.
+# Examples:
+#   FRAMES_PER_POSE = 10   # very fast
+#   FRAMES_PER_POSE = 30   # normal (default)
+#   FRAMES_PER_POSE = 60   # slow (2x longer)
+#   FRAMES_PER_POSE = 120  # very slow (4x longer)
+FRAMES_PER_POSE = 60  # adjust to slow down / speed up
 # ===============================================
 
 # ========== PUNCTUATION SPEED OVERRIDE ==========
-# Número de frames a usar para tokens de puntuación/espacio (más rápido que
-# una pose normal). Puedes ajustar este valor al inicio del script.
-# Por defecto usamos un fractionario de FRAMES_PER_POSE para mantener proporción
-# si el usuario cambia FRAMES_PER_POSE más abajo.
-PUNCT_FRAMES_PER_POSE = max(1, int(FRAMES_PER_POSE * 0.25))  # por defecto 25% de FRAMES_PER_POSE
+# Number of frames to use for punctuation/space tokens (faster than a normal pose).
+# You can adjust this value near the top of the script.
+# By default we use a fraction of FRAMES_PER_POSE so proportions are kept
+# if the user later changes FRAMES_PER_POSE.
+PUNCT_FRAMES_PER_POSE = max(1, int(FRAMES_PER_POSE * 0.25))  # default 25% of FRAMES_PER_POSE
 # ===============================================
 
 # ========== SUBTITLES CONFIGURATION ==========
-# Ajustes accesibles para controlar comportamiento de subtítulos
-SUBTITLE_MAX_LINE_CHARS = 35  # número máximo de caracteres por línea de subtítulo
+# Accessible settings to control subtitle behavior
+SUBTITLE_MAX_LINE_CHARS = 35  # max characters per subtitle line
 SUBTITLE_FONT_NAME = "Arial"
-SUBTITLE_FONT_SIZE = 74  # tamaño de fuente para ASS
-SUBTITLE_BG_ALPHA = 0.45  # alfa para fondo semi-opaco en dibujo inline
-SUBTITLE_ALIGN = 2  # 2 = Bottom-Center en ASS (subtítulos centrados abajo)
-SUBTITLE_MARGIN = 10  # márgenes en ASS
+SUBTITLE_FONT_SIZE = 74  # ASS font size
+SUBTITLE_BG_ALPHA = 0.45  # alpha for semi-opaque background when drawing inline
+SUBTITLE_ALIGN = 2  # 2 = Bottom-Center in ASS (centered bottom subtitles)
+SUBTITLE_MARGIN = 10  # ASS margins
 # ==============================================
 
-# Si True, dibuja subtítulos directamente en cada frame (inline) en lugar de
-# generar .ass y quemarlos con ffmpeg. Esto evita problemas de formatos y
-# sincronización con ffmpeg y reproductores.
+# If True, draw subtitles directly onto each frame (inline) instead of
+# generating .ass and burning with ffmpeg. This avoids format and
+# synchronization issues with ffmpeg and some players.
 DRAW_SUBTITLES_INLINE = False
 
-# Conexiones estándar de MediaPipe para manos (21 landmarks)
-# Muestra la estructura ósea de la mano
+# Standard MediaPipe hand connections (21 landmarks)
+# Shows the skeletal structure of the hand
 HAND_CONNECTIONS = [
     # Palma
-    (0, 1), (1, 2), (2, 3), (3, 4),      # Pulgar
-    (0, 5), (5, 6), (6, 7), (7, 8),      # Índice
-    (5, 9), (9, 10), (10, 11), (11, 12), # Dedo medio
-    (9, 13), (13, 14), (14, 15), (15, 16), # Anular
-    (13, 17), (17, 18), (18, 19), (19, 20), # Meñique
-    (0, 17), (0, 13), (0, 9), (0, 5)     # Conexiones desde muñeca a base de dedos
+    (0, 1), (1, 2), (2, 3), (3, 4),      # Thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),      # Index
+    (5, 9), (9, 10), (10, 11), (11, 12), # Middle
+    (9, 13), (13, 14), (14, 15), (15, 16), # Ring
+    (13, 17), (17, 18), (18, 19), (19, 20), # Pinky
+    (0, 17), (0, 13), (0, 9), (0, 5)     # Connections wrist -> finger bases
 ]
 
-# Grosor de las líneas que conectan landmarks (ajustable)
+# Thickness of the lines connecting landmarks (adjustable)
 CONNECTION_LINE_THICKNESS = 10
 
 # Human-style hand rendering configuration
@@ -112,13 +111,13 @@ FINGER_CHAINS = [
     [0, 13, 14, 15, 16],
     [0, 17, 18, 19, 20],
 ]
-# tonos de piel (BGR) — piel clara, cálida
+# Skin tone colors (BGR) — warm, light skin palette
 SKIN_BASE    = np.array([170, 190, 220], dtype=np.uint8)   # base (B, G, R)
-SKIN_LIGHT   = np.array([215, 230, 245], dtype=np.uint8)   # luces
-SKIN_SHADOW  = np.array([110, 130, 160], dtype=np.uint8)   # sombras
+SKIN_LIGHT   = np.array([215, 230, 245], dtype=np.uint8)   # highlights
+SKIN_SHADOW  = np.array([110, 130, 160], dtype=np.uint8)   # shadows
 NAIL_COLOR   = (210, 185, 170)
 
-# pequeño tinte warm para corregir azulados (BGR; puede ser negativo en B)
+# small warm tint to correct bluish casts (BGR; B may be negative)
 HAND_TINT = np.array([-6.0, 4.0, 10.0], dtype=np.float32)
 
 # Outline color (used to draw hand contours)
@@ -149,7 +148,7 @@ def find_ffmpeg():
     for path in common_paths:
         if Path(path).exists():
             return str(path)
-    raise RuntimeError("ffmpeg no encontrado")
+    raise RuntimeError("ffmpeg not found")
 
 
 def cleanup_sidecars(ass_path, keep_sidecars=False):
@@ -517,8 +516,8 @@ def pose_to_char(pose_name: str) -> str:
 
 def _format_ass_time(sec):
     """
-    Convierte segundos a formato ASS (h:mm:ss.cs donde cs = centisegundos).
-    Ejemplo: 123.456 -> "0:02:03.45"
+    Convert seconds to ASS time format (h:mm:ss.cs where cs = centiseconds).
+    Example: 123.456 -> "0:02:03.45"
     """
     h = int(sec // 3600)
     m = int((sec % 3600) // 60)
@@ -613,8 +612,8 @@ def _estimate_text_width(text: str, font_scale=1.6, thickness=3) -> int:
 
 def generate_ass_subtitles(sequence, fps_out, frames_per_pose, ass_path, start_frame=1, write_ass=True):
     """
-    Genera archivo ASS con subtítulos que se actualizan con cada pose.
-    Replica exactamente la lógica de generate_ass_for_cumulative_letters de run_pose_to_video_from_static.py
+    Generate an ASS file with subtitles that update per-pose.
+    Mirrors the logic of generate_ass_for_cumulative_letters from run_pose_to_video_from_static.py
     """
     # Include PlayRes resolution if provided via hints so ASS font sizing matches video
     play_res_x = getattr(generate_ass_subtitles, "img_width", None) or 1920
@@ -762,28 +761,28 @@ def generate_ass_subtitles(sequence, fps_out, frames_per_pose, ass_path, start_f
 
 def apply_ass_subtitles_with_ffmpeg(input_video, ass_path, output_video):
     """
-    Usa ffmpeg para quemar los subtítulos ASS en el vídeo.
-    Replica la lógica de burn_ass_with_ffmpeg de run_pose_to_video_from_static.py
+    Use ffmpeg to burn ASS subtitles into the video.
+    Mirrors the burn_ass_with_ffmpeg logic from run_pose_to_video_from_static.py
     """
     # Locate ffmpeg
     try:
         ffmpeg_path = find_ffmpeg()
     except Exception:
-        progress("[ERROR] ffmpeg no encontrado.")
+        progress("[ERROR] ffmpeg not found.")
         raise
     
-    # Validar archivos
+    # Validate files
     ass_p = Path(ass_path)
     if not ass_p.exists():
-        progress(f"[ERROR] Archivo ASS no encontrado: {ass_path}")
-        raise RuntimeError(f"ASS no encontrado: {ass_path}")
+            progress(f"[ERROR] ASS file not found: {ass_path}")
+            raise RuntimeError(f"ASS not found: {ass_path}")
 
     input_p = Path(input_video)
     if not input_p.exists():
-        progress(f"[ERROR] Archivo de entrada no encontrado: {input_video}")
-        raise RuntimeError(f"Input no encontrado: {input_video}")
+            progress(f"[ERROR] Input file not found: {input_video}")
+            raise RuntimeError(f"Input not found: {input_video}")
     
-    # Usar forward slashes y escapar ':' y comillas simples
+    # Use forward slashes and escape ':' and single quotes
     ass_posix = ass_p.as_posix()
     # escape colon and single quote for ffmpeg subtitles filter
     escaped = ass_posix.replace(":", r"\:").replace("'", r"\'")
@@ -799,16 +798,16 @@ def apply_ass_subtitles_with_ffmpeg(input_video, ass_path, output_video):
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
     
     if result.stdout:
-        progress(f"[DEBUG] ffmpeg output:\n{result.stdout[-500:]}")  # Últimos 500 chars
-    
+        progress(f"[DEBUG] ffmpeg output:\n{result.stdout[-500:]}")  # last 500 chars
+
     if result.returncode != 0:
-        progress(f"[ERROR] ffmpeg falló con código {result.returncode}")
-        raise RuntimeError(f"ffmpeg falló: {result.stdout}")
-    
+        progress(f"[ERROR] ffmpeg failed with code {result.returncode}")
+        raise RuntimeError(f"ffmpeg failed: {result.stdout}")
+
     output_p = Path(output_video)
     if not output_p.exists() or output_p.stat().st_size == 0:
-        progress(f"[ERROR] ffmpeg no produjo salida válida: {output_video}")
-        raise RuntimeError(f"ffmpeg no produjo salida válida")
+        progress(f"[ERROR] ffmpeg did not produce valid output: {output_video}")
+        raise RuntimeError(f"ffmpeg did not produce valid output")
     
     return str(output_video)
 
@@ -825,18 +824,18 @@ def embed_srt_with_ffmpeg(input_video, srt_path, output_video, language="eng"):
     try:
         ffmpeg_path = find_ffmpeg()
     except Exception:
-        progress("[ERROR] ffmpeg no encontrado (para embed SRT).")
+        progress("[ERROR] ffmpeg not found (for embed SRT).")
         raise
 
     srt_p = Path(srt_path)
     if not srt_p.exists():
-        progress(f"[ERROR] Archivo SRT no encontrado: {srt_path}")
-        raise RuntimeError(f"SRT no encontrado: {srt_path}")
+        progress(f"[ERROR] SRT file not found: {srt_path}")
+        raise RuntimeError(f"SRT not found: {srt_path}")
 
     input_p = Path(input_video)
     if not input_p.exists():
-        progress(f"[ERROR] Archivo de entrada no encontrado: {input_video}")
-        raise RuntimeError(f"Input no encontrado: {input_video}")
+        progress(f"[ERROR] Input file not found: {input_video}")
+        raise RuntimeError(f"Input not found: {input_video}")
 
     # Build command: copy video/audio, convert subtitle to mov_text and set language
     cmd = [
@@ -855,68 +854,67 @@ def embed_srt_with_ffmpeg(input_video, srt_path, output_video, language="eng"):
         str(output_video),
     ]
 
-    progress(f"[DEBUG] Ejecutando embed SRT: {' '.join(cmd)}")
+    progress(f"[DEBUG] Running embed SRT: {' '.join(cmd)}")
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
     progress(f"[DEBUG] ffmpeg returncode: {result.returncode}")
     if result.stdout:
         progress(f"[DEBUG] ffmpeg output (tail):\n{result.stdout[-500:]}")
 
     if result.returncode != 0:
-        progress(f"[ERROR] ffmpeg embed SRT falló con código {result.returncode}")
-        raise RuntimeError(f"ffmpeg falló: {result.stdout}")
+        progress(f"[ERROR] ffmpeg embed SRT failed with code {result.returncode}")
+        raise RuntimeError(f"ffmpeg failed: {result.stdout}")
 
     output_p = Path(output_video)
     if not output_p.exists() or output_p.stat().st_size == 0:
-        progress(f"[ERROR] ffmpeg no produjo salida válida al embed SRT: {output_video}")
-        raise RuntimeError("ffmpeg no produjo salida válida")
+        progress(f"[ERROR] ffmpeg did not produce valid output when embedding SRT: {output_video}")
+        raise RuntimeError("ffmpeg did not produce valid output")
 
-    progress(f"[OK] SRT embedded correctamente: {output_video}")
+    progress(f"[OK] SRT embedded successfully: {output_video}")
     return str(output_video)
 
 def text_to_pose_sequence(text_input):
+    """Convert text into a sequence of pose identifiers.
+
+    Rules:
+      - Spaces -> 'SPACE'
+      - Periods -> 'PERIOD'
+      - Commas -> 'COMMA'
+      - Alphabetic characters: the first meaningful alphabetic character (or any
+        alphabetic after a period) is uppercase; other alphabetic characters are
+        lowercase.
+      - Other characters are preserved as-is.
+
+    Returns a list of pose tokens, e.g. 'Hi.' -> ['H','i','PERIOD']
     """
-    Convierte un texto en una secuencia de poses (caracteres).
-    Formato esperado del input text:
-      - Cada carácter es una pose individual
-      - Espacios " " → pose "SPACE" (opcional, se puede ignorar)
-      - Puntos "." → pose "PERIOD" (opcional, al final marca fin de palabra)
-      - Mayúsculas: se tratarán como minúsculas excepto la primera letra
-    
-    Ejemplos:
-      - "HELLO" → ["H", "E", "L", "L", "O"]
-      - "Hola mundo" → ["H", "O", "L", "A", "SPACE", "M", "U", "N", "D", "O"]
-      - "Hi." → ["H", "I", "PERIOD"]
-    """
+    if text_input is None:
+        return []
+
     sequence = []
     prev_non_space = None
-    for char in text_input:
-        if char == " ":
+
+    for ch in text_input:
+        if ch == " ":
             sequence.append("SPACE")
-            # do not change prev_non_space
             continue
-        if char == ".":
+        if ch == ".":
             sequence.append("PERIOD")
             prev_non_space = "."
             continue
-        if char == ",":
+        if ch == ",":
             sequence.append("COMMA")
             prev_non_space = ","
             continue
 
-        # For alphabetic characters apply capitalization rules based on previous
-        # meaningful character: first meaningful alpha -> uppercase; after '.' -> uppercase;
-        # otherwise lowercase. Non-alpha characters are preserved as-is.
-        if isinstance(char, str) and char.isalpha():
+        if isinstance(ch, str) and ch.isalpha():
             if prev_non_space is None or prev_non_space == ".":
-                pose_char = char.upper()
+                pose_char = ch.upper()
             else:
-                pose_char = char.lower()
+                pose_char = ch.lower()
             sequence.append(pose_char)
             prev_non_space = pose_char
         else:
-            # preserve other characters (digits, symbols)
-            sequence.append(char)
-            prev_non_space = char
+            sequence.append(ch)
+            prev_non_space = ch
 
     return sequence
 
@@ -940,16 +938,16 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
         out_path = str(OUTPUT_DIR / OUTPUT_NAME)
     ensure_dir(out_path)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    # Tamaño del output: solo ancho original (no concatenado)
+    # Output size: only the original width (no concatenation)
     out_w = w
     writer = cv2.VideoWriter(str(out_path), fourcc, fps_out, (out_w, h))
     if not writer.isOpened():
-        raise RuntimeError("No se pudo abrir VideoWriter (comprueba codecs)")
+        raise RuntimeError("Could not open VideoWriter (check codecs)")
     
-    # Configuración de Picture-in-Picture (esquina inferior derecha)
-    pip_width = int(w * 0.25)  # 25% del ancho original
-    pip_height = int(h * 0.25)  # 25% del alto original
-    pip_margin = 15  # Margen desde las esquinas
+    # Picture-in-Picture configuration (bottom-right corner)
+    pip_width = int(w * 0.25)  # 25% of source width
+    pip_height = int(h * 0.25)  # 25% of source height
+    pip_margin = 15  # margin from edges
 
     base_app_back = Path(__file__).resolve().parent.parent.parent
     default_ref_dir = base_app_back / "data" / "dataset-en-bruto" / "asl_dataset" / "mediapipe_poses"
@@ -1062,12 +1060,12 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                 else:
                     cv2.putText(canvas, "no landmarks", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (30,30,30), 2, cv2.LINE_AA)
 
-                # Agregar PiP en esquina inferior derecha
+                # Add PiP (Picture-in-Picture) in the bottom-right corner
                 ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
                 x_pos = w - pip_width - pip_margin
                 y_pos = h - pip_height - pip_margin
                 canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
-                # Dibujar borde alrededor del PiP
+                # Draw a border around the PiP
                 cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
                 # draw inline subtitle if requested
                 if DRAW_SUBTITLES_INLINE:
@@ -1101,12 +1099,12 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
             for _ in range(duration_iter):
                 canvas = 255 * np.ones((h, w, 3), dtype="uint8")
                 cv2.putText(canvas, f"{pose_name} (no frames)", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (10,10,10), 3, cv2.LINE_AA)
-                # Agregar PiP en esquina inferior derecha
+                # Add PiP (Picture-in-Picture) in the bottom-right corner
                 ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
                 x_pos = w - pip_width - pip_margin
                 y_pos = h - pip_height - pip_margin
                 canvas[y_pos:y_pos+pip_height, x_pos:x_pos+pip_width] = ref_img_resized
-                # Dibujar borde alrededor del PiP
+                # Draw a border around the PiP
                 cv2.rectangle(canvas, (x_pos-2, y_pos-2), (x_pos+pip_width+2, y_pos+pip_height+2), (200,200,200), 2)
                 if DRAW_SUBTITLES_INLINE:
                     _draw_inline_subtitle(canvas, cumulative)
@@ -1118,7 +1116,7 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
     writer.release()
     progress(f"Writer released. Total frames written: {total_frames}")
     
-    # Generar subtítulos ASS y aplicarlos con ffmpeg (si no dibujamos inline)
+    # Generate ASS subtitles and apply them with ffmpeg (if not drawing inline)
     if apply_subtitles:
         try:
             if DRAW_SUBTITLES_INLINE:
@@ -1126,7 +1124,7 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
             else:
                 out_path_obj = Path(out_path)
                 ass_path = out_path_obj.with_suffix(".ass")
-                progress(f"[SUBTITLES] Generando archivo ASS: {ass_path}")
+                progress(f"[SUBTITLES] Generating ASS file: {ass_path}")
                 progress(f"[SUBTITLES] frames_counts: {frames_counts} (total_frames={total_frames})")
                 # Generar ASS usando las duraciones reales por pose
                 # pass image width and pip_x to generate_ass_subtitles so it can avoid PiP overlap
@@ -1140,7 +1138,7 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                 # Generate sidecars: if we will embed soft subtitles, avoid creating ASS
                 write_ass = not soft_subtitles
                 generated_path = generate_ass_subtitles(sequence, fps_out, frames_counts, str(ass_path), start_frame=1, write_ass=write_ass)
-                progress(f"[SUBTITLES] Sidecars generados: {generated_path}")
+                progress(f"[SUBTITLES] Sidecars generated: {generated_path}")
 
                 # Decide embedding method: soft subtitles (mov_text) or burn ASS
                 if soft_subtitles:
@@ -1153,17 +1151,17 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                         progress(f"[SUBTITLES] ✗ Embed SRT failed: {e}")
                         result = None
 
-                    if result and temp_output.exists():
-                        out_path_obj.unlink()
-                        temp_output.rename(out_path)
-                        # remove sidecars unless user asked to keep them
-                        cleanup_sidecars(ass_path, keep_sidecars)
-                        progress(f"[SUBTITLES] ✓ Video final con subtítulos (soft): {out_path}")
-                    else:
-                        progress(f"[SUBTITLES] ✗ No se pudieron embeber subtítulos; se mantiene el video sin cambios")
+                        if result and temp_output.exists():
+                            out_path_obj.unlink()
+                            temp_output.rename(out_path)
+                            # remove sidecars unless user asked to keep them
+                            cleanup_sidecars(ass_path, keep_sidecars)
+                            progress(f"[SUBTITLES] ✓ Final video with subtitles (soft): {out_path}")
+                        else:
+                            progress(f"[SUBTITLES] ✗ Could not embed subtitles; keeping video unchanged")
                 else:
                     # Hard burn ASS into the video (existing path)
-                    progress(f"[SUBTITLES] Quemando subtítulos ASS en el video...")
+                    progress(f"[SUBTITLES] Burning ASS subtitles into the video...")
                     temp_output = out_path_obj.with_stem(out_path_obj.stem + "_temp")
                     try:
                         result = apply_ass_subtitles_with_ffmpeg(out_path, str(ass_path), str(temp_output))
@@ -1176,36 +1174,37 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                         temp_output.rename(out_path)
                         # remove sidecars unless user asked to keep them
                         cleanup_sidecars(ass_path, keep_sidecars)
-                        progress(f"[SUBTITLES] - [OK] Video final con subtítulos: {out_path}")
+                        progress(f"[SUBTITLES] - [OK] Final video with subtitles: {out_path}")
                     else:
-                        progress(f"[SUBTITLES] ✗ No se pudieron aplicar subtítulos, pero se mantiene el video sin ellos")
+                        progress(f"[SUBTITLES] ✗ Could not apply subtitles; keeping video without them")
         except Exception as e:
-            progress(f"[SUBTITLES] Excepción: {e}")
+            progress(f"[SUBTITLES] Exception: {e}")
             import traceback
             progress(traceback.format_exc())
     
     return out_path
 
 def main():
-    default_json = str(Path(__file__).resolve().parent / "poses_mediapipe_video.json")
+    # default JSON is at app-back/mp/poses_mediapipe_video.json (one level above src)
+    default_json = str(Path(__file__).resolve().parent.parent / "poses_mediapipe_video.json")
     default_out = str(OUTPUT_DIR / OUTPUT_NAME)
     ap = argparse.ArgumentParser(description="Render poses sequence into annotated video using MediaPipe-style JSON (no Blender)")
-    ap.add_argument("--json", "-j", default=default_json, help="ruta al JSON de poses")
-    ap.add_argument("--poses", "-p", default=None, help="cadena de poses separadas por comas (ej: A,B,C). Si no se proporciona, usar --text")
-    ap.add_argument("--text", "-t", default=None, help="texto a convertir en poses (ej: 'HELLO' → ['H','E','L','L','O']). Soporta espacios y puntos")
-    ap.add_argument("--out", "-o", default=default_out, help="ruta de salida mp4")
-    ap.add_argument("--fps", type=int, default=None, help="fps entrada/base (se multiplica por speed)")
-    ap.add_argument("--width", type=int, default=None, help="ancho salida (por pose)")
-    ap.add_argument("--height", type=int, default=None, help="alto salida")
-    ap.add_argument("--speed", "-s", type=float, default=SPEED_FACTOR, help="factor de velocidad de reproducción (>1 acelera)")
+    ap.add_argument("--json", "-j", default=default_json, help="path to poses JSON")
+    ap.add_argument("--poses", "-p", default=None, help="comma-separated poses string (e.g. A,B,C). If not provided, use --text")
+    ap.add_argument("--text", "-t", default=None, help="text to convert into poses (e.g. 'HELLO' -> ['H','E','L','L','O']). Supports spaces and periods")
+    ap.add_argument("--out", "-o", default=default_out, help="output mp4 path")
+    ap.add_argument("--fps", type=int, default=None, help="input/base fps (multiplied by speed)")
+    ap.add_argument("--width", type=int, default=None, help="output width (per pose)")
+    ap.add_argument("--height", type=int, default=None, help="output height")
+    ap.add_argument("--speed", "-s", type=float, default=SPEED_FACTOR, help="playback speed factor (>1 speeds up)")
     ap.add_argument("--soft-subtitles", dest="soft_subtitles", action="store_true", help="Embed generated SRT as soft subtitles (mov_text) instead of burning ASS")
     ap.add_argument("--subtitle-lang", dest="subtitle_lang", default="eng", help="ISO-639-2 language code for embedded subtitle track (default: eng)")
     ap.add_argument("--keep-sidecars", dest="keep_sidecars", action="store_true", help="Keep generated .ass/.srt sidecar files after embedding/burning")
-    ap.add_argument("--hand-style", choices=["realistic", "wire"], default=HAND_RENDER_STYLE, help="Método de dibujo de mano (realistic o wire).")
+    ap.add_argument("--hand-style", choices=["realistic", "wire"], default=HAND_RENDER_STYLE, help="Hand rendering method ('realistic' or 'wire').")
     args = ap.parse_args()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    # determinar la secuencia de poses: desde INPUT_TEXT, luego --text, luego --poses
+    # determine the pose sequence: from INPUT_TEXT, then --text, then --poses
     if INPUT_TEXT is not None:
         progress(f"Using INPUT_TEXT variable: '{INPUT_TEXT}'")
         seq = text_to_pose_sequence(INPUT_TEXT)
@@ -1217,13 +1216,13 @@ def main():
     elif args.poses:
         seq = _seq_from_poses_string(args.poses)
     else:
-        # valor por defecto si ninguno se proporciona
+        # default value if none is provided
         seq = _seq_from_poses_string("A")
     
     if not seq:
-        print("No hay poses en la secuencia. Usar --text 'HELLO' o --poses 'A,B' por ejemplo.")
+        print("No poses in sequence. Use --text 'HELLO' or --poses 'A,B' for example.")
         sys.exit(1)
-    # Llamar al renderer con los parámetros recibidos
+    # Call the renderer with the received parameters
     progress("Starting render...")
     out = render_sequence_from_json(args.json, seq, out_path=args.out, show=False, save=True,
                                    fps=args.fps, width=args.width, height=args.height, speed_factor=args.speed,

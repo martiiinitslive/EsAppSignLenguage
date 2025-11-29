@@ -1,7 +1,7 @@
 """
-Módulo para convertir texto en imágenes de dictadología.
+Module to convert text into images for dictation-style rendering.
 """
 
 def text_to_images(text, images_db_path):
-    # TODO: Implementar conversión de texto a imágenes
+    # TODO: Implement conversion from text to image sequence
     pass

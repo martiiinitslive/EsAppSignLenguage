@@ -2,8 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 import os
 from src.components.audio_extractor import extract_audio_from_video
 from src.components.speech_to_text import speech_to_text
-# from models.gen_model import TextToDictaModel  # Para el futuro: integración del modelo
-# from src.components.images_to_video import images_to_video  # Para el futuro
+# Future: model integration (TextToDictaModel)
+# Future: images_to_video integration
 
 app = FastAPI()
 
@@ -11,15 +11,16 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 @app.get("/")
 def read_root():
-    return {"message": "Bienvenido a la API de interpretación de lengua de signos en español"}
+    return {"message": "Welcome to the Spanish sign-language interpretation API"}
 
-# Endpoint para recibir un video y procesarlo
+# Endpoint to receive a video and process it
 @app.post("/procesar_video/")
-async def procesar_video(file: UploadFile = File(...)):
+@app.post("/process_video/")
+async def process_video(file: UploadFile = File(...)):
     temp_dir = os.path.join(BASE_DIR, "temp")
     os.makedirs(temp_dir, exist_ok=True)
     video_path = os.path.join(temp_dir, f"temp_{file.filename}")
-    # Guardar el archivo de video temporalmente
+    # Save the uploaded video to a temporary file
     with open(video_path, "wb") as buffer:
         buffer.write(await file.read())
 
@@ -30,11 +31,12 @@ async def procesar_video(file: UploadFile = File(...)):
     # Convertir audio a texto
     texto = speech_to_text(audio_path)
 
-    # Aquí iría la llamada al modelo y la generación de imágenes y video
+    # Model inference and image/video generation would go here (future integration)
     # Por ahora, solo devolvemos el texto reconocido
 
-    # Limpiar archivos temporales
+    # Clean up temporary files
     os.remove(video_path)
     os.remove(audio_path)
 
-    return {"texto": texto}
+    # Keep original Spanish key for backward compatibility, and add English key
+    return {"texto": texto, "text": texto}
