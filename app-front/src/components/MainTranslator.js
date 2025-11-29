@@ -9,9 +9,10 @@ function MainTranslator() {
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const videoRef = useRef(null);
 
-  const API_BASE = process.env.REACT_APP_API_BASE || '';
+  // Default backend URL for development
+  const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
 
-  // Handler básico
+  // Basic handler
   const handleInputChange = (e) => setInputValue(e.target.value);
 
   async function generateVideo() {
@@ -19,24 +20,42 @@ function MainTranslator() {
     setLoading(true);
     setResultVideoUrl(null);
     try {
+      // Helper to parse response safely and provide meaningful errors
+      const parseResponse = async (resp) => {
+        const text = await resp.text();
+        const ct = resp.headers.get('content-type') || '';
+        if (!resp.ok) {
+          // try to parse JSON error if present
+          if (ct.includes('application/json')) {
+            try { const j = JSON.parse(text); throw new Error(j.detail || j.error || JSON.stringify(j)); } catch(e) { throw new Error(text || `HTTP ${resp.status}`); }
+          }
+          throw new Error(text || `HTTP ${resp.status}`);
+        }
+        if (ct.includes('application/json')) {
+          try { return JSON.parse(text); } catch (e) { throw new Error('Invalid JSON response from server'); }
+        }
+        // Non-JSON success response: return raw text
+        return { raw: text };
+      };
+
       if (inputType === 'text') {
         const resp = await fetch(`${API_BASE}/generate_from_text/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: inputValue }),
         });
-        const j = await resp.json();
-        if (!resp.ok) throw new Error(j.detail || 'Server error');
-        setResultVideoUrl(API_BASE + j.download_url);
+        const j = await parseResponse(resp);
+        if (j.download_url) setResultVideoUrl(API_BASE + j.download_url);
+        else throw new Error('Unexpected server response');
       } else if (inputType === 'link') {
         const resp = await fetch(`${API_BASE}/transcribe_youtube/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: inputValue }),
         });
-        const j = await resp.json();
-        if (!resp.ok) throw new Error(j.detail || 'Server error');
-        setResultVideoUrl(API_BASE + j.download_url);
+        const j = await parseResponse(resp);
+        if (j.download_url) setResultVideoUrl(API_BASE + j.download_url);
+        else throw new Error('Unexpected server response');
       } else if (inputType === 'file') {
         if (!inputValue) throw new Error('No file selected');
         const form = new FormData();
@@ -45,9 +64,9 @@ function MainTranslator() {
           method: 'POST',
           body: form,
         });
-        const j = await resp.json();
-        if (!resp.ok) throw new Error(j.detail || 'Server error');
-        setResultVideoUrl(API_BASE + j.download_url);
+        const j = await parseResponse(resp);
+        if (j.download_url) setResultVideoUrl(API_BASE + j.download_url);
+        else throw new Error('Unexpected server response');
       }
     } catch (e) {
       setError(String(e));
@@ -70,19 +89,19 @@ function MainTranslator() {
           className={inputType === 'text' ? 'active' : ''}
           onClick={() => setInputType('text')}
         >
-          <span role="img" aria-label="Texto">📝</span> Texto
+          <span role="img" aria-label="Text">📝</span> Text
         </button>
         <button
           className={inputType === 'file' ? 'active' : ''}
           onClick={() => setInputType('file')}
         >
-          <span role="img" aria-label="Archivo">🎵</span> Audio/Vídeo
+          <span role="img" aria-label="File">🎵</span> Audio/Video
         </button>
         <button
           className={inputType === 'link' ? 'active' : ''}
           onClick={() => setInputType('link')}
         >
-          <span role="img" aria-label="Enlace">🔗</span> Enlace
+          <span role="img" aria-label="Link">🔗</span> Link
         </button>
       </div>
 
@@ -110,7 +129,7 @@ function MainTranslator() {
             {inputType === 'text' && (
               <textarea
                 rows={6}
-                placeholder="Escribe el texto aquí..."
+                placeholder="Write text here..."
                 value={inputValue}
                 onChange={handleInputChange}
               />
@@ -118,7 +137,7 @@ function MainTranslator() {
             {inputType === 'file' && (
               <div className="file-upload-container">
                 <label className="file-upload-label">
-                  Seleccionar archivo
+                  Select file
                   <input
                     type="file"
                     accept="audio/*,video/*"
@@ -127,21 +146,21 @@ function MainTranslator() {
                   />
                 </label>
                 <span className="file-upload-name">
-                  {inputValue ? inputValue.name : "Ningún archivo seleccionado"}
+                  {inputValue ? inputValue.name : "No file selected"}
                 </span>
               </div>
             )}
             {inputType === 'link' && (
               <input
                 type="text"
-                placeholder="Pega el enlace aquí..."
+                placeholder="Paste the link here..."
                 value={inputValue}
                 onChange={handleInputChange}
               />
             )}
           </div>
             <button className="translate-btn" onClick={generateVideo} disabled={loading}>
-              {loading ? 'Generando...' : 'Generar vídeo'}
+              {loading ? 'Generating...' : 'Generate video'}
             </button>
             {error && <div className="error">{error}</div>}
         </div>
@@ -150,14 +169,14 @@ function MainTranslator() {
         </div>
         <div className="translator-panel output-panel">
           <div className="panel-header">
-            <span role="img" aria-label="output">🎬</span> Resultado
+            <span role="img" aria-label="output">🎬</span> Result
           </div>
           <div className="result-area">
             {resultVideoUrl ? (
               <div>
                 <video ref={videoRef} src={resultVideoUrl} controls width="100%" />
                 <div style={{ marginTop: 8 }}>
-                  <label>Velocidad: </label>
+                  <label>Speed: </label>
                   <select value={playbackRate} onChange={onChangePlaybackRate}>
                     <option value={0.5}>0.5x</option>
                     <option value={0.75}>0.75x</option>
@@ -171,7 +190,7 @@ function MainTranslator() {
             ) : (
               <div className="placeholder">
                 <span role="img" aria-label="waiting">⌛</span>
-                <p>El vídeo generado aparecerá aquí</p>
+                <p>The generated video will appear here</p>
               </div>
             )}
           </div>

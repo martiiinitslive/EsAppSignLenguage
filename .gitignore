@@ -1,9 +1,6 @@
 #para ignorar todas las carpetas llamadas 'x'
 #hay que poner: **/x/
 
-# Ignorar archivo y carpetas de documentación
-*.txt
-
 # --- BACKEND ---
 __pycache__/
 *.pyc
@@ -15,9 +12,7 @@ __pycache__/
 .env
 .venv/
 .env.*
-**/MezclaDatasets/  
-**/models/**/*.pt
-**/models/**/*.pth
+
 **/models/
 **/notebooks/
 **/imagenes/

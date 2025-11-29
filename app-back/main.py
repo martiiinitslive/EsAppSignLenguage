@@ -9,6 +9,8 @@ from src.components.audio_extractor import extract_audio_from_video
 from src.components.speech_to_text import speech_to_text
 from src.components import format_text_for_renderer
 from src.components.downloader import download_youtube
+import glob
+import shutil
 # Future: model integration (TextToDictaModel)
 # Future: images_to_video integration
 
@@ -24,6 +26,50 @@ app.add_middleware(
 )
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+OUTPUT_MP_DIR = Path(BASE_DIR) / "mp" / "output_mp"
+
+
+def cleanup_generated_outputs(only_render_prefix=True):
+    """Remove generated render files from the output_mp folder.
+
+    If `only_render_prefix` is True (default) only files starting with
+    'render_' will be removed (MP4 and common sidecars .ass/.srt). Otherwise
+    all mp4/.ass/.srt files are removed.
+    """
+    try:
+        OUTPUT_MP_DIR.mkdir(parents=True, exist_ok=True)
+        if only_render_prefix:
+            # Remove render_*.mp4 and matching sidecars
+            for mp4 in OUTPUT_MP_DIR.glob("render_*.mp4"):
+                try:
+                    mp4.unlink()
+                except Exception:
+                    pass
+                # remove sidecars with same stem
+                stem = mp4.with_suffix("")
+                for ext in ('.ass', '.srt'):
+                    side = stem.with_suffix(ext)
+                    try:
+                        if side.exists():
+                            side.unlink()
+                    except Exception:
+                        pass
+        else:
+            # Conservative removal of common generated files
+            for pat in ("*.mp4", "*.ass", "*.srt"):
+                for p in OUTPUT_MP_DIR.glob(pat):
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+@app.on_event("shutdown")
+def _on_shutdown_cleanup():
+    # Remove generated outputs on server shutdown to avoid leaving large files
+    cleanup_generated_outputs()
 
 @app.get("/")
 def read_root():
@@ -38,10 +84,21 @@ def _render_from_text(text: str):
     if not mp_script.exists() or not json_path.exists():
         raise RuntimeError("Renderer or poses JSON missing")
 
-    # Dynamic import
+    # Dynamic import (robust to custom loader specs used in tests)
     spec = importlib.util.spec_from_file_location("mp_renderer", str(mp_script))
-    mp_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mp_mod)
+    if spec is None or getattr(spec, "loader", None) is None:
+        raise RuntimeError("Could not create spec for renderer")
+    try:
+        mp_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mp_mod)
+    except Exception:
+        # Some test fakes provide a loader with exec_module but no
+        # create_module / full spec semantics. In that case, create a
+        # plain module object and ask the loader to populate it.
+        import types
+        name = getattr(spec, "name", "mp_renderer")
+        mp_mod = types.ModuleType(name)
+        spec.loader.exec_module(mp_mod)
 
     # Normalize text for renderer
     safe_text = format_text_for_renderer.normalize_text_for_renderer(text)
@@ -178,8 +235,16 @@ async def generate_from_text(payload: dict):
     # Dynamically import the renderer module so we can call its functions
     try:
         spec = importlib.util.spec_from_file_location("mp_renderer", str(mp_script))
-        mp_mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mp_mod)
+        if spec is None or getattr(spec, "loader", None) is None:
+            raise RuntimeError("Could not create spec for renderer")
+        try:
+            mp_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mp_mod)
+        except Exception:
+            import types
+            name = getattr(spec, "name", "mp_renderer")
+            mp_mod = types.ModuleType(name)
+            spec.loader.exec_module(mp_mod)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load renderer: {e}")
 

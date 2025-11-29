@@ -129,6 +129,28 @@ def main():
             except Exception as ex:
                 print(f"Error stopping {name}: {ex}")
 
+        # Cleanup generated outputs in app-back/mp/output_mp
+        try:
+            out_dir = root / 'app-back' / 'mp' / 'output_mp'
+            if out_dir.exists():
+                print(f"Cleaning generated render_* files in {out_dir}...")
+                for mp4 in out_dir.glob('render_*.mp4'):
+                    try:
+                        mp4.unlink()
+                    except Exception:
+                        pass
+                    # remove associated sidecars
+                    stem = mp4.with_suffix('')
+                    for ext in ('.ass', '.srt'):
+                        side = stem.with_suffix(ext)
+                        try:
+                            if side.exists():
+                                side.unlink()
+                        except Exception:
+                            pass
+        except Exception as e:
+            print(f"Error cleaning output directory: {e}")
+
     print("Launcher exiting")
     return 0
 
