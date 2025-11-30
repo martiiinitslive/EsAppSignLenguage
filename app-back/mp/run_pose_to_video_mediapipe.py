@@ -13,6 +13,7 @@ except Exception:
     # cv2 (OpenCV) is required at runtime; if missing the script will exit with an instructive message.
 import time
 import numpy as np
+import unicodedata
 
 # Simple visualization pipeline that mirrors "visualize_mediapipe_json_video.py"
 # but accepts an ordered `--poses` string (e.g. "A,B,C") and renders a single
@@ -448,6 +449,20 @@ def _draw_landmarks_on_img(img, landmarks, color=(0,180,255), connections=None, 
         _draw_hand_realistic(img, landmarks, handedness=handedness, connections=connections)
     else:
         _draw_hand_wireframe(img, pts, color=color, connections=connections, radius=radius)
+
+
+def _draw_centered_text(img, text, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1.5, thickness=3, color=(10,10,10)):
+    """Draw `text` centered both horizontally and vertically on `img`."""
+    if not text:
+        return
+    h, w = img.shape[:2]
+    (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    x = max(0, (w - text_w) // 2)
+    # vertical center: baseline adjustment
+    y = max(text_h, (h + text_h) // 2)
+    # draw shadow/outline for readability
+    cv2.putText(img, text, (x, y), font, font_scale, (0,0,0), thickness + 2, cv2.LINE_AA)
+    cv2.putText(img, text, (x, y), font, font_scale, (255,255,255), thickness, cv2.LINE_AA)
 
 
 def extract_frame_landmarks(frame_obj):
@@ -937,10 +952,17 @@ def text_to_pose_sequence(text_input):
     if text_input is None:
         return []
 
+    # Normalize and remove diacritics so accented vowels become their base form
+    try:
+        s = unicodedata.normalize('NFKD', str(text_input))
+        s = ''.join(c for c in s if not unicodedata.combining(c))
+    except Exception:
+        s = str(text_input)
+
     sequence = []
     prev_non_space = None
 
-    for ch in text_input:
+    for ch in s:
         if ch == " ":
             sequence.append("SPACE")
             continue
@@ -1152,7 +1174,8 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                             handedness=handed,
                         )
                 else:
-                    cv2.putText(canvas, "no landmarks", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (30,30,30), 2, cv2.LINE_AA)
+                    # Center the 'no landmarks' message
+                    _draw_centered_text(canvas, "no landmarks", font_scale=1.6, thickness=3)
 
                 # Add PiP (Picture-in-Picture) in the bottom-right corner (if enabled)
                 if show_pip and ref_img is not None:
@@ -1194,7 +1217,8 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
 
             for _ in range(duration_iter):
                 canvas = 255 * np.ones((h, w, 3), dtype="uint8")
-                cv2.putText(canvas, f"{pose_name} (no frames)", (40, h//2), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (10,10,10), 3, cv2.LINE_AA)
+                # Center the '(no frames)' message for better presentation
+                _draw_centered_text(canvas, f"{pose_name} (no frames)", font_scale=1.5, thickness=3)
                 # Add PiP (Picture-in-Picture) in the bottom-right corner (if enabled)
                 if show_pip and ref_img is not None:
                     ref_img_resized = cv2.resize(ref_img, (pip_width, pip_height), interpolation=cv2.INTER_AREA)
