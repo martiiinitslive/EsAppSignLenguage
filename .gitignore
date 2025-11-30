@@ -12,6 +12,7 @@ __pycache__/
 .env
 .venv/
 .env.*
+.pytest_cache/
 
 **/models/
 **/notebooks/
@@ -28,7 +29,7 @@ __pycache__/
 app-back/blender/output/
 
 # --- FRONTEND ---
-**/node_modules/
+#**/node_modules/
 **/build/
 **/coverage/
 .pnp
