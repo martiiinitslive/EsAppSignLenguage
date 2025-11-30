@@ -24,6 +24,7 @@ __pycache__/
 
 app-back/node_modules/
 app-back/mp/pose_cache/
+app-back/mp/output_mp/render_*
 
 **/build/
 **/coverage/
