@@ -11,8 +11,6 @@ from src.components import format_text_for_renderer
 from src.components.downloader import download_youtube
 import glob
 import shutil
-# Future: model integration (TextToDictaModel)
-# Future: images_to_video integration
 
 app = FastAPI()
 
@@ -111,6 +109,7 @@ def _render_from_text(text: str):
     out_path = str(out_dir / f"render_{int(time.time())}.mp4")
 
     video_path = mp_mod.render_sequence_from_json(str(json_path), seq, out_path=out_path, show=False, save=True)
+
     filename = Path(video_path).name
     download_url = f"/download_video/{filename}"
     return str(video_path), download_url
@@ -129,17 +128,17 @@ async def process_video(file: UploadFile = File(...)):
     try:
         # Extract audio
         audio_path = video_path + ".wav"
-        extract_audio_from_video(video_path, audio_path)
+        try:
+            extract_audio_from_video(video_path, audio_path)
+        except Exception as e:
+            # Provide a clearer API error for audio extraction failures
+            raise HTTPException(status_code=500, detail=f"Audio extraction failed: {e}")
 
         # Convert audio to text
         text = speech_to_text(audio_path)
     finally:
-        # Remove uploaded video (do not keep uploaded video)
-        try:
-            if os.path.exists(video_path):
-                os.remove(video_path)
-        except Exception:
-            pass
+        # keep uploaded video for use as background; we'll remove it after rendering
+        pass
 
     if not text:
         raise HTTPException(status_code=500, detail="Could not transcribe uploaded video")
@@ -155,7 +154,30 @@ async def process_video(file: UploadFile = File(...)):
     try:
         video_path_out, download_url = _render_from_text(text)
     except Exception as e:
+        # attempt to remove upload and audio before raising
+        try:
+            if os.path.exists(video_path):
+                os.remove(video_path)
+        except Exception:
+            pass
+        try:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Rendering failed: {e}")
+
+    # Clean up uploaded video and extracted audio now that render finished
+    try:
+        if os.path.exists(video_path):
+            os.remove(video_path)
+    except Exception:
+        pass
+    try:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+    except Exception:
+        pass
 
     return {"video_path": video_path_out, "download_url": download_url}
 
@@ -191,27 +213,30 @@ async def transcribe_youtube(payload: dict):
             pass
         raise HTTPException(status_code=500, detail=f"Failed processing YouTube URL: {e}")
     finally:
-        # Always remove downloaded video to avoid storage accumulation
+        # keep downloaded video until after rendering (we will clean up later)
+        pass
+
+    if not text:
+        raise HTTPException(status_code=500, detail="Could not transcribe YouTube video")
+
+    try:
+        # Render using the downloaded video
+        video_path_out, download_url = _render_from_text(text)
+    finally:
+        # Clean up downloaded video and audio
         try:
             if 'downloaded' in locals() and os.path.exists(downloaded):
                 os.remove(downloaded)
         except Exception:
             pass
+        try:
+            if 'audio_path' in locals() and os.path.exists(audio_path):
+                os.remove(audio_path)
+        except Exception:
+            pass
 
-    if not text:
-        raise HTTPException(status_code=500, detail="Could not transcribe YouTube video")
-
-    # Remove audio file
-    try:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-    except Exception:
-        pass
-
-    try:
-        video_path_out, download_url = _render_from_text(text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Rendering failed: {e}")
+    if not video_path_out:
+        raise HTTPException(status_code=500, detail="Rendering failed")
 
     return {"video_path": video_path_out, "download_url": download_url}
 

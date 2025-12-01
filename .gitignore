@@ -14,6 +14,8 @@ __pycache__/
 .env.*
 .pytest_cache/
 
+
+
 **/models/
 **/notebooks/
 **/imagenes/
@@ -25,6 +27,8 @@ __pycache__/
 app-back/node_modules/
 app-back/mp/pose_cache/
 app-back/mp/output_mp/render_*
+test/video_audio_test/
+app-back/temp/*
 
 **/build/
 **/coverage/

@@ -7,7 +7,7 @@ function App() {
   return (
     <div className="App">
       <header>
-        <h1>Sign2Text</h1>
+        <h1>Text2Sign</h1>
         <p>Multimedia translator: text, audio, video or Youtube link</p>
       </header>
       <MainTranslator />
