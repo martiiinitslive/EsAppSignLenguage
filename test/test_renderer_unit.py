@@ -1,6 +1,7 @@
 import pytest
 import importlib.util
 from pathlib import Path
+import shutil
 
 repo = Path(__file__).resolve().parent.parent
 
@@ -21,7 +22,7 @@ def test_text_to_pose_sequence_basic():
     assert seq[-1] == 'PERIOD'
 
 
-@pytest.mark.skipif(not Path('C:/ffmpeg/bin/ffmpeg.EXE').exists(), reason="ffmpeg not detected on system")
+@pytest.mark.skipif(not shutil.which('ffmpeg'), reason="ffmpeg not detected on system")
 def test_overlay_helper_runs():
     mod = _load_renderer()
     # Only test that overlay function is importable — actual invocation is heavy

@@ -14,6 +14,22 @@ if importlib.util.find_spec("httpx") is None:
     )
 
 
+# Make `app-back` importable for tests that do module-level imports.
+# Some test modules import `src.components.*` at import time, so ensure the
+# app-back directory is on `sys.path` immediately when conftest is imported.
+current = Path(__file__).resolve()
+repo_root = None
+for p in current.parents:
+    if (p / "app-back").is_dir():
+        repo_root = p
+        break
+if repo_root is None:
+    repo_root = current.parents[1]
+app_back = repo_root / "app-back"
+if str(app_back) not in sys.path:
+    sys.path.insert(0, str(app_back))
+
+
 @pytest.fixture(scope="session")
 def app_module(tmp_path_factory):
     """Load the `app-back/main.py` module as `app_module` and ensure imports work.

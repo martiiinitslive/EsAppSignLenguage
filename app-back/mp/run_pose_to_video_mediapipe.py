@@ -1074,7 +1074,24 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                 continue
             except Exception as e:
                 progress(f"[CACHE] Error loading cache for {pose_name}: {e}")
-        pose_entry = poses.get(pose_name) or poses.get(pose_name.lower()) or poses.get(pose_name.upper())
+        # Resolve pose_entry robustly: `poses` in the JSON may be a dict
+        # (mapping pose_name -> entry) or a list of entries. Handle both.
+        pose_entry = None
+        if isinstance(poses, dict):
+            pose_entry = poses.get(pose_name) or poses.get(pose_name.lower()) or poses.get(pose_name.upper())
+        elif isinstance(poses, list):
+            # list entries may be dicts with a 'name' field or may directly be
+            # a list of frame objects for a given pose. Try to find an entry
+            # whose 'name' matches the pose token.
+            for item in poses:
+                if isinstance(item, dict):
+                    # common key is 'name' or 'pose'
+                    name = item.get('name') or item.get('pose')
+                    if name and name in (pose_name, pose_name.lower(), pose_name.upper()):
+                        pose_entry = item
+                        break
+            # if not found, leave pose_entry as None; downstream code will
+            # treat it as missing and render a fallback frame
 
         # find reference image or video
         video_candidate = None
@@ -1102,7 +1119,15 @@ def render_sequence_from_json(json_path, sequence, out_path=None, show=True, sav
                     if src_img_path: break
             ref_img = _load_ref_image(src_img_path, w, h)
 
-        frames_list = pose_entry.get("frames") if isinstance(pose_entry, dict) else None
+        # frames_list can be provided in several shapes:
+        # - pose_entry is a dict with a 'frames' key -> use that
+        # - pose_entry itself is a list of frame objects -> use it directly
+        if isinstance(pose_entry, dict):
+            frames_list = pose_entry.get("frames")
+        elif isinstance(pose_entry, list):
+            frames_list = pose_entry
+        else:
+            frames_list = None
 
         # update cumulative text using pose->char mapping and same capitalization rules
         c = pose_to_char(pose_name)

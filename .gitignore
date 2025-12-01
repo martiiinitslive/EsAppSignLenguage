@@ -24,8 +24,8 @@ __pycache__/
 **/.vscode/
 **/output/
 
-app-back/node_modules/
-app-back/mp/pose_cache/
+app-front/node_modules/
+
 app-back/mp/output_mp/render_*
 test/video_audio_test/
 app-back/temp/*

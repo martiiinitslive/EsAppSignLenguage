@@ -67,7 +67,9 @@ def cleanup_generated_outputs(only_render_prefix=True):
 @app.on_event("shutdown")
 def _on_shutdown_cleanup():
     # Remove generated outputs on server shutdown to avoid leaving large files
-    cleanup_generated_outputs()
+    # Only remove files starting with the `render_` prefix to avoid deleting
+    # other artifacts (e.g. cached poses or reference videos).
+    cleanup_generated_outputs(only_render_prefix=True)
 
 @app.get("/")
 def read_root():
