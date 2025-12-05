@@ -15,7 +15,7 @@ __pycache__/
 .pytest_cache/
 
 
-
+**/inputs/
 **/models/
 **/notebooks/
 **/imagenes/
